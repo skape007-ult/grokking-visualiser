@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grokking Visualiser</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Grokking Visualiser</h1>
+      <p class="lede">
+        A small neural network learning to add numbers modulo 97. Drag the slider
+        to move through training: the network memorises its training examples
+        within a few hundred steps, but only <em>much</em> later suddenly gets
+        unseen examples right.
+      </p>
+    </header>
+
+    <section class="panel" aria-labelledby="curve-title">
+      <h2 id="curve-title">Accuracy during training</h2>
+      <div class="chart-box"><canvas id="curve" role="img"
+        aria-label="Train and test accuracy against training step, log scale"></canvas></div>
+    </section>
+
+    <div class="scrubber">
+      <label for="step-slider" class="visually-hidden">Training step</label>
+      <input id="step-slider" type="range" min="0" max="0" value="0" step="1" disabled>
+      <p id="readout" class="readout" aria-live="polite">Loading…</p>
+    </div>
+
+    <p id="error" class="error" role="alert" hidden></p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

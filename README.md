@@ -73,3 +73,49 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 or simply `./run_all.sh` (also regenerates the plots in `notes/plots/`).
 
+## Phase 2 — The curves, online
+
+**What was built.** `site/`: a static page (plain HTML + vanilla JS +
+Chart.js 4.4.1 from jsDelivr, no build step) showing train and test
+accuracy on a log-step axis, with a slider that moves a marker along the
+chart and updates a readout ("Step 9,675 — train 100%, test 94%"). A
+GitHub Actions workflow publishes `site/` to GitHub Pages.
+
+**Key decisions and why.**
+- *The slider indexes recorded steps, not raw step numbers,* so it moves
+  evenly along the log axis (otherwise the first 1 000 steps, where
+  memorisation happens, would be squeezed into 4% of the track).
+- *Relative fetch paths* (`data/manifest.json`), so the same files work from
+  `python -m http.server` and under the Pages subpath `/<repo>/`.
+- *Chart animations off;* moving the slider only redraws the marker
+  (`chart.draw()`), with no data update, so scrubbing feels instant.
+- *Headless check* (`check_site.py`, Playwright) serves `site/`, then at
+  desktop and phone sizes asserts no console errors or failed requests, that
+  the chart renders, that keyboard, mouse-drag and touch move the readout, and
+  that there's no horizontal scroll on mobile. Playwright is a dev-only
+  dependency, not in `requirements.txt`.
+
+**Preview locally**
+
+```bash
+cd site && python3 -m http.server 8000     # then open http://localhost:8000
+```
+
+(Opening `index.html` directly from disk won't work: browsers block `fetch`
+on `file://`. The page shows an error saying so.)
+
+**Run the headless check** (optional)
+
+```bash
+.venv/bin/pip install playwright && .venv/bin/python -m playwright install chromium
+.venv/bin/python check_site.py --screenshots
+```
+
+**Deploy to GitHub Pages**
+1. Create an empty repo on GitHub (e.g. `grokking-visualiser`), with no README.
+2. `git remote add origin git@github.com:<you>/grokking-visualiser.git && git push -u origin main`
+3. On GitHub: **Settings → Pages → Build and deployment → Source: "GitHub Actions"**.
+4. Re-run the "Deploy site to GitHub Pages" workflow from the **Actions** tab
+   (the first push may have run before Pages was enabled). The site goes live at
+   `https://<you>.github.io/grokking-visualiser/`.
+
