@@ -14,23 +14,90 @@
         A small neural network learning to add numbers modulo 97. Drag the slider
         to move through training: the network memorises its training examples
         within a few hundred steps, but only <em>much</em> later suddenly gets
-        unseen examples right.
+        unseen examples right. Then switch the training setup and see what changes.
       </p>
     </header>
 
-    <section class="panel" aria-labelledby="curve-title">
-      <h2 id="curve-title">Accuracy during training</h2>
-      <div class="chart-box"><canvas id="curve" role="img"
-        aria-label="Train and test accuracy against training step, log scale"></canvas></div>
-    </section>
+    <section class="viz" aria-label="Interactive visualisation">
+    <div class="run-toggle" id="run-toggle" role="group" aria-label="Training setup"></div>
+
+    <div class="panels">
+      <section class="panel" aria-labelledby="curve-title">
+        <h2 id="curve-title">Accuracy during training</h2>
+        <div class="chart-box"><canvas id="curve" role="img"
+          aria-label="Train and test accuracy against training step, log scale"></canvas></div>
+      </section>
+
+      <section class="panel" aria-labelledby="emb-title">
+        <h2 id="emb-title">Embeddings of the numbers 0–96
+          <span class="frame-label" id="frame-label"></span></h2>
+        <div class="emb-box" id="emb-box">
+          <canvas id="embedding" role="img"
+            aria-label="Scatter plot of the 97 number embeddings projected to two dimensions"></canvas>
+          <div class="emb-tooltip" id="emb-tooltip" hidden></div>
+        </div>
+        <div class="legend" aria-hidden="true">
+          <span>0</span><span class="legend-bar" id="legend-bar"></span><span id="legend-max">96</span>
+        </div>
+        <p class="caption">
+          Each dot is one number's learned embedding, flattened to 2D (fixed axes
+          per run). Watch whether the cloud organises into rings, and when.
+        </p>
+      </section>
+    </div>
 
     <div class="scrubber">
       <label for="step-slider" class="visually-hidden">Training step</label>
       <input id="step-slider" type="range" min="0" max="0" value="0" step="1" disabled>
       <p id="readout" class="readout" aria-live="polite">Loading…</p>
     </div>
+    </section>
 
     <p id="error" class="error" role="alert" hidden></p>
+
+    <article class="explain">
+      <h2>What am I looking at?</h2>
+      <p>
+        <strong>Grokking</strong> is when a neural network, long after it has
+        perfectly memorised its training examples, suddenly starts getting
+        examples it has never seen right. For a long stretch it looks like
+        nothing is happening: training accuracy is already 100% and accuracy
+        on new examples is near zero. Then, with no change to the setup,
+        it "gets it", and accuracy on new examples shoots up to 100%.
+      </p>
+      <p>
+        <strong>What was done.</strong> The task is to answer
+        <em>(a + b) mod 97</em> for every pair of numbers from 0 to 96: 9,409 sums
+        in all. A small transformer (one layer, about 220,000 parameters) was shown
+        30% of them (2,823 sums) and trained for 25,000 steps, then tested on the
+        remaining 70% it had never seen. Training used the AdamW optimiser with
+        weight decay 1.0, a penalty that constantly nudges the network's weights
+        towards zero. The other settings each change exactly one thing from that setup.
+      </p>
+      <p>
+        <strong>What the toggle shows.</strong> In standard training the network
+        hits 99% on its training examples by step
+        <span data-fact="baseline.train99">130</span>, but only crosses 95% on unseen
+        examples at step <span data-fact="baseline.test95">10,065</span>,
+        <span data-fact="baseline.ratio">77</span>&times; later.
+        <strong>Remove weight decay and generalisation never comes:</strong> the
+        network memorises just as fast, yet after 25,000 steps it is still right on only
+        <span data-fact="no_decay.finalTest">3%</span> of unseen examples, and its
+        embeddings never form rings. With twice the data (60%), there is barely a
+        delay: 95% on unseen examples by step <span data-fact="more_data.test95">378</span>.
+        With half the data (15%), unseen accuracy stays at chance
+        (<span data-fact="less_data.finalTest">1%</span> at step 25,000). It may
+        still grok later, but not within this training budget.
+      </p>
+      <p class="refs">
+        Papers: Power et al. (2022),
+        <a href="https://arxiv.org/abs/2201.02177">Grokking: Generalization Beyond Overfitting on Small Algorithmic Datasets</a>;
+        Nanda et al. (2023),
+        <a href="https://arxiv.org/abs/2301.05217">Progress measures for grokking via mechanistic interpretability</a>.
+        <!-- TODO(owner): replace REPO_URL with the GitHub repo URL. -->
+        Code and data: <a href="REPO_URL">REPO_URL</a>.
+      </p>
+    </article>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>

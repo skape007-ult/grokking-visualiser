@@ -119,3 +119,33 @@ on `file://`. The page shows an error saying so.)
    (the first push may have run before Pages was enabled). The site goes live at
    `https://<you>.github.io/grokking-visualiser/`.
 
+## Phase 3 — Embeddings and the run toggle
+
+**What was built.**
+- *Embedding panel:* the 97 number embeddings in each run's fixed 2-D PCA
+  basis, driven by the same slider (it shows the latest snapshot at or
+  before the slider's step). Fixed, equal-aspect axis limits per run; viridis
+  colouring by value with a legend; hover (or tap) shows the number, and a
+  click/tap pins it so you can follow one number through training.
+  Hand-drawn `<canvas>`, sized to the device pixel ratio so it stays crisp.
+- *Run toggle:* four real `<button>`s with `aria-pressed`, built from the
+  manifest. Switching keeps the slider at the same step, refits the embedding
+  axes, lazy-loads and caches the run, and writes `#run=<id>` to the URL.
+  Deep links like `#run=no_decay` work.
+- *Explanation:* three paragraphs plus references, with every number taken
+  from the exported data (and checked by `check_site.py`).
+- *Mobile:* single column under 720px; the slider + readout bar is sticky at
+  the bottom of the screen while the visualisation is in view, so you can
+  scrub while looking at either panel. Touch targets ≥ 44px.
+
+**Key decisions and why.**
+- *Show the latest embedding snapshot at or before the slider's step,* never
+  a later one: the panel should never show the future.
+- *Equal x/y scale,* because distances in PCA space are meaningful; stretching
+  one axis would distort the rings.
+- *Static explanation text, checked against the data,* rather than text
+  generated in JS: easy for a human to edit, still impossible to go stale
+  silently.
+
+Screenshots (from `check_site.py --screenshots`): `notes/screenshots/`.
+

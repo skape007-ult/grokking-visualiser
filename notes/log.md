@@ -154,3 +154,18 @@ Export: 4 files of ~70 KB each (limit 200 KB), `validate.py` passes. Spot-
 checked `no_decay.json`: 200 steps from 1 to 25 000, full config present,
 test acc tail 0.0302, 40 frames of 97 × 2 coords.
 
+## 2026-10-30 — Phases 2–3: the site
+
+No training runs in these phases. Notes for the writeup:
+- The headless check (`check_site.py`) caught a bug *in the check itself*:
+  after clicking a run button, it read the readout before the new run had
+  loaded, so each "pass" was actually showing the previous run's numbers. The
+  app now sets `body[data-run]` once a run has rendered; the check waits for
+  it and compares the readout against the run's own JSON.
+- Explanation-text numbers are static HTML (easy to edit), but every number is
+  tagged `data-fact="…"` and `check_site.py` recomputes each one from
+  `site/data/` and fails on any mismatch, so the text can't silently drift
+  from the data.
+- Initial view transfers ~150 KB uncompressed (page, CSS, JS, manifest,
+  baseline run, Chart.js from the CDN); other runs load only when selected.
+
