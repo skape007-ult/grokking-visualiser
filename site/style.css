@@ -93,7 +93,12 @@ h2 { font-size: 1rem; line-height: 1.35; margin: 0 0 12px; color: var(--muted); 
   aspect-ratio: 1 / 1;     /* keep the embedding plot square */
   margin: 0 auto;
 }
-.emb-box canvas { -webkit-tap-highlight-color: transparent; position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.emb-box canvas {
+  -webkit-tap-highlight-color: transparent;
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  touch-action: manipulation;   /* let swipes scroll the page */
+  cursor: pointer;
+}
 .emb-tooltip {
   position: absolute;
   pointer-events: none;

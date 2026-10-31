@@ -1,7 +1,7 @@
 """Headless browser check of the static site (dev tool, needs Playwright).
 
     pip install playwright && python -m playwright install chromium
-    python check_site.py [--screenshots]
+    python check_site.py [--screenshots] [--browsers chromium,webkit,firefox | all]
 
 Serves site/ over HTTP on a free port, loads it in headless Chromium at
 desktop and phone sizes, and fails (non-zero exit) on: console errors or
@@ -158,16 +158,16 @@ def check_toggle(page, label):
     check(readout(page).endswith("test 3%"), f"[{label}] no_decay at end reads test 3% ({readout(page)!r})")
 
 
-def check_hash(browser, url):
+def check_hash(browser, url, name):
     ctx, page, problems, _ = open_page(browser, url + "#run=less_data", viewport={"width": 1280, "height": 900})
     wait_run(page, "less_data")
-    check(pressed_run(page) == "less_data" and not problems, "[hash] #run=less_data deep link selects that run")
+    check(pressed_run(page) == "less_data" and not problems, f"[{name}/hash] #run=less_data deep link selects that run")
     page.evaluate("location.hash = '#run=more_data'")
     wait_run(page, "more_data")
-    check(True, "[hash] changing the hash switches run")
+    check(True, f"[{name}/hash] changing the hash switches run")
     ctx.close()
     ctx, page, problems, _ = open_page(browser, url + "#run=bogus", viewport={"width": 1280, "height": 900})
-    check(pressed_run(page) == "baseline" and not problems, "[hash] unknown run id falls back to baseline")
+    check(pressed_run(page) == "baseline" and not problems, f"[{name}/hash] unknown run id falls back to baseline")
     ctx.close()
 
 
@@ -244,83 +244,130 @@ def make_screenshots(browser, url):
           f"{len(frames)} frames) + site/og-image.png")
 
 
+def check_desktop(browser, url, label):
+    ctx, page, problems, requests = open_page(browser, url, viewport={"width": 1280, "height": 900},
+                                              device_scale_factor=2)
+    check_common(page, problems, label)
+    local = [u.removeprefix(url) for u, _ in requests if u.startswith(url)]
+    total_kb = sum(n for _, n in requests) / 1024
+    print(f"  info initial view: {len(requests)} requests, {total_kb:.0f} KB (uncompressed bodies); local: {local}")
+    check(not any("runs/" in u and "baseline" not in u for u in local),
+          f"[{label}] other runs are lazy-loaded (not fetched up front)")
+    check_slider(page, label)
+    check_toggle(page, label)
+
+    # Hover a point -> tooltip; click it -> stays pinned after the mouse leaves.
+    r = page.locator("#embedding").bounding_box()
+    cx, cy = r["x"] + r["width"] / 2, r["y"] + r["height"] / 2
+    tip = page.locator("#emb-tooltip")
+    found = None
+    for dx in range(-90, 91, 5):
+        for dy in range(-90, 91, 5):
+            page.mouse.move(cx + dx, cy + dy)
+            if tip.is_visible():
+                found = (cx + dx, cy + dy)
+                break
+        if found:
+            break
+    check(found is not None and tip.inner_text().isdigit(), f"[{label}] hover shows number tooltip")
+    if found:
+        number = tip.inner_text()
+        page.mouse.click(*found)
+        page.mouse.move(r["x"] - 40, r["y"] - 40)
+        check(tip.is_visible() and tip.inner_text() == number, f"[{label}] click pins number {number}")
+    ctx.close()
+
+
+def check_load_failure(browser, url, label):
+    """If a run fails to load, show an error but keep the current run intact."""
+    ctx, page, _, _ = open_page(browser, url, viewport={"width": 1280, "height": 900})
+    page.route("**/runs/more_data.json", lambda route: route.abort())
+    before = readout(page)
+    page.locator("#run-toggle button[data-run=more_data]").click()
+    try:
+        page.wait_for_selector("#error:not([hidden])", timeout=5000)
+        shown = True
+    except Exception:
+        shown = False
+    check(shown, f"[{label}] failed load: error message shown")
+    check(pressed_run(page) == "baseline", f"[{label}] failed load: toggle reverts to the shown run")
+    check(readout(page) == before, f"[{label}] failed load: readout and data kept")
+    page.unroute("**/runs/more_data.json")
+    page.locator("#run-toggle button[data-run=more_data]").click()
+    wait_run(page, "more_data")
+    check(page.locator("#error").is_hidden(), f"[{label}] retry after failure works and clears the error")
+    ctx.close()
+
+
+def check_mobile(browser, url, label, mobile_ctx, screenshots=False):
+    ctx, page, problems, _ = open_page(browser, url, **mobile_ctx)
+    check_common(page, problems, label)
+    check(page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth"),
+          f"[{label}] no horizontal scroll")
+    slider = page.locator("#step-slider")
+    box = slider.bounding_box()
+    check(box["height"] >= 44, f"[{label}] slider touch target >= 44px ({box['height']:.0f}px)")
+    heights = [b.bounding_box()["height"] for b in page.locator("#run-toggle button").all()]
+    check(min(heights) >= 44, f"[{label}] run buttons >= 44px tall ({min(heights):.0f}px)")
+    touch_action = page.evaluate("() => getComputedStyle(document.getElementById('embedding')).touchAction")
+    check(touch_action != "none", f"[{label}] swipes on the embedding plot can scroll the page ({touch_action})")
+    before = readout(page)
+    page.touchscreen.tap(box["x"] + box["width"] * 0.6, box["y"] + box["height"] / 2)
+    check(readout(page) != before, f"[{label}] tap on slider updates readout ({readout(page)!r})")
+    page.locator("#run-toggle button[data-run=no_decay]").tap()
+    wait_run(page, "no_decay")
+    check(True, f"[{label}] tapping a run button switches run")
+    emb_w = page.locator("#embedding").bounding_box()["width"]
+    vw = mobile_ctx["viewport"]["width"]
+    check(emb_w <= vw - 32 + 1, f"[{label}] embedding fits the screen ({emb_w:.0f}px of {vw}px)")
+    if screenshots:
+        page.locator("#run-toggle button[data-run=baseline]").tap()
+        wait_run(page, "baseline")
+        set_slider(page, 199)
+        page.screenshot(path=str(SHOTS / "mobile.png"))
+    ctx.close()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--screenshots", action="store_true", help="save to notes/screenshots/")
+    ap.add_argument("--browsers", default="chromium",
+                    help="comma-separated: chromium,webkit,firefox (or 'all')")
     args = ap.parse_args()
+    names = ["chromium", "webkit", "firefox"] if args.browsers == "all" else args.browsers.split(",")
 
     check_facts()
     httpd, url = serve()
     print(f"serving site/ at {url}")
     with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-
-        print("desktop 1280x900")
-        ctx, page, problems, requests = open_page(browser, url, viewport={"width": 1280, "height": 900},
-                                                  device_scale_factor=2)
-        check_common(page, problems, "desktop")
-        local = [(u, n) for u, n in requests if u.startswith(url)]
-        total_kb = sum(n for _, n in requests) / 1024
-        print(f"  info initial view: {len(requests)} requests, {total_kb:.0f} KB (uncompressed bodies); "
-              f"local: {[u.removeprefix(url) for u, _ in local]}")
-        check(not any("runs/no_decay" in u or "runs/more_data" in u for u, _ in local),
-              "[desktop] other runs are lazy-loaded (not fetched up front)")
-        check_slider(page, "desktop")
-        check_toggle(page, "desktop")
-        # Tooltip on hover over a point.
-        pt = page.evaluate("""() => { const r = document.getElementById('embedding').getBoundingClientRect();
-            return [r.left, r.top, r.width]; }""")
-        page.mouse.move(pt[0] + pt[2] / 2, pt[1] + pt[2] / 2)
-        for dx in range(-60, 61, 6):
-            for dy in range(-60, 61, 6):
-                page.mouse.move(pt[0] + pt[2] / 2 + dx, pt[1] + pt[2] / 2 + dy)
-                if page.locator("#emb-tooltip").is_visible():
-                    break
-            if page.locator("#emb-tooltip").is_visible():
-                break
-        tip = page.locator("#emb-tooltip")
-        check(tip.is_visible() and tip.inner_text().isdigit(), f"[desktop] hover shows number tooltip ({tip.inner_text() if tip.is_visible() else None})")
-        ctx.close()
-
-        check_hash(browser, url)
-
-        if args.screenshots:
-            make_screenshots(browser, url)
-
-        print("mobile 390x844")
-        ctx, page, problems, _ = open_page(browser, url, viewport={"width": 390, "height": 844},
-                                           device_scale_factor=3, is_mobile=True, has_touch=True)
-        check_common(page, problems, "mobile")
-        check(page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth"),
-              "[mobile] no horizontal scroll")
-        slider = page.locator("#step-slider")
-        box = slider.bounding_box()
-        check(box["height"] >= 44, f"[mobile] slider touch target >= 44px ({box['height']:.0f}px)")
-        heights = [b.bounding_box()["height"] for b in page.locator("#run-toggle button").all()]
-        check(min(heights) >= 44, f"[mobile] run buttons >= 44px tall ({min(heights):.0f}px)")
-        before = readout(page)
-        page.touchscreen.tap(box["x"] + box["width"] * 0.6, box["y"] + box["height"] / 2)
-        check(readout(page) != before, f"[mobile] tap on slider updates readout ({readout(page)!r})")
-        page.locator("#run-toggle button[data-run=no_decay]").tap()
-        wait_run(page, "no_decay")
-        check(True, "[mobile] tapping a run button switches run")
-        emb_w = page.locator("#embedding").bounding_box()["width"]
-        check(emb_w <= 390 - 32 + 1, f"[mobile] embedding fits the screen ({emb_w:.0f}px)")
-        if args.screenshots:
-            page.locator("#run-toggle button[data-run=baseline]").tap()
-            wait_run(page, "baseline")
-            page.evaluate("() => { const s = document.getElementById('step-slider'); s.value = 199; "
-                          "s.dispatchEvent(new Event('input')); }")
-            page.screenshot(path=str(SHOTS / "mobile.png"))
-        ctx.close()
-
-        browser.close()
+        for name in names:
+            browser = getattr(pw, name).launch()
+            print(f"--- {name} {browser.version}")
+            check_desktop(browser, url, f"{name}/desktop")
+            check_load_failure(browser, url, f"{name}/desktop")
+            check_hash(browser, url, name)
+            if name == "webkit":
+                # Closest available stand-in for Safari on an iPhone.
+                mobile_ctx = dict(pw.devices["iPhone 13"])
+                mobile_ctx.pop("default_browser_type", None)
+                label = f"{name}/iPhone 13"
+            else:
+                mobile_ctx = {"viewport": {"width": 390, "height": 844}, "device_scale_factor": 3,
+                              "has_touch": True}
+                if name != "firefox":  # Firefox has no is_mobile emulation
+                    mobile_ctx["is_mobile"] = True
+                label = f"{name}/mobile 390x844"
+            shots = args.screenshots and name == "chromium"
+            if shots:
+                make_screenshots(browser, url)
+            check_mobile(browser, url, label, mobile_ctx, screenshots=shots)
+            browser.close()
     httpd.shutdown()
 
     if failures:
         print(f"\n{len(failures)} check(s) FAILED")
         sys.exit(1)
-    print("\nall site checks passed")
+    print(f"\nall site checks passed ({', '.join(names)})")
 
 
 if __name__ == "__main__":

@@ -34,13 +34,10 @@ def r(x):
     return x
 
 
-def export():
-    runs_dir = SITE_DATA / "runs"
-    if runs_dir.exists():
-        shutil.rmtree(runs_dir)
-    runs_dir.mkdir(parents=True)
-
+def build() -> tuple[dict, dict[str, dict]]:
+    """Read every run from outputs/ and return (manifest, {relative path: run data})."""
     manifest = {"p": None, "operation": None, "runs": []}
+    files = {}
     for spec in SWEEP:
         cfg = spec.config
         run = json.loads((OUTPUTS / cfg.id / "run.json").read_text())
@@ -48,7 +45,8 @@ def export():
         if run["config"] != cfg.to_dict():
             raise SystemExit(f"{cfg.id}: outputs/ were produced by a different config; re-train")
 
-        data = {
+        rel = f"runs/{cfg.id}.json"
+        files[rel] = {
             "config": run["config"],
             "steps": run["steps"],
             "train_acc": r(run["train_acc"]),
@@ -60,9 +58,6 @@ def export():
                 for s, c in zip(proj["embedding_steps"], proj["coords"])
             ],
         }
-        rel = f"runs/{cfg.id}.json"
-        (SITE_DATA / rel).write_text(json.dumps(data, separators=(",", ":")))
-
         manifest["p"], manifest["operation"] = cfg.p, cfg.operation
         manifest["runs"].append(
             {
@@ -74,8 +69,21 @@ def export():
                 "file": rel,
             }
         )
-        print(f"wrote site/data/{rel} ({(SITE_DATA / rel).stat().st_size / 1024:.0f} KB)")
+    return manifest, files
 
+
+def export():
+    # Read and convert everything first, so a missing or stale run aborts
+    # before site/data/ is touched (never leaves the site half-exported).
+    manifest, files = build()
+
+    runs_dir = SITE_DATA / "runs"
+    if runs_dir.exists():
+        shutil.rmtree(runs_dir)
+    runs_dir.mkdir(parents=True)
+    for rel, data in files.items():
+        (SITE_DATA / rel).write_text(json.dumps(data, separators=(",", ":")))
+        print(f"wrote site/data/{rel} ({(SITE_DATA / rel).stat().st_size / 1024:.0f} KB)")
     (SITE_DATA / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print("wrote site/data/manifest.json")
 

@@ -21,8 +21,9 @@ identical, it memorises just as fast and is still at 3% on unseen sums after
 Tested on an Apple M3 MacBook (CPU), Python 3.14. Run time scales with the
 training-set size (full-batch): `less_data` ~2 min, `baseline` / `no_decay`
 ~4.5 min each, `more_data` ~9 min. `./run_all.sh` runs them one after another
-in ~20 min total, and a from-scratch run of it reproduced `site/data/` and the
-plots byte-for-byte.
+in ~20 min total (`JOBS=4 ./run_all.sh` trains them in parallel: ~17.5 min, identical
+results). A from-scratch run reproduced `site/data/` and the plots
+byte-for-byte.
 
 ```bash
 python3 -m venv .venv
@@ -45,17 +46,39 @@ cd site && python3 -m http.server 8000             # open http://localhost:8000
 
 Runs are deterministic (seeded, `torch.use_deterministic_algorithms`, CPU),
 so this regenerates `site/data/` byte-for-byte on the same software stack.
-Optional browser check (needs `pip install playwright && python -m playwright install chromium`):
-`.venv/bin/python check_site.py --screenshots`.
+Opening `site/index.html` straight from disk won't work (browsers block `fetch`
+on `file://`), so serve it over HTTP as above.
+
+Optional browser checks (Chromium, WebKit/Safari, Firefox):
+
+```bash
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m playwright install chromium webkit firefox
+.venv/bin/python check_site.py --browsers all     # add --screenshots to refresh images/GIF
+```
+
+### Publish to GitHub Pages
+
+1. Create an empty GitHub repo (e.g. `grokking-visualiser`), with no README.
+2. `git remote add origin git@github.com:<you>/grokking-visualiser.git && git push -u origin main`
+3. On GitHub: **Settings → Pages → Build and deployment → Source: "GitHub Actions"**.
+4. If the first push ran before Pages was enabled, re-run "Deploy site to GitHub
+   Pages" from the **Actions** tab. The site goes live at
+   `https://<you>.github.io/grokking-visualiser/`.
 
 ## Project structure
+
+How each piece works, function by function, and the JSON contract between
+`train/` and `site/`: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ```
 grokking-visualiser/
 ├── README.md
+├── ARCHITECTURE.md               how every stage and file works
 ├── requirements.txt              pinned: torch, numpy, matplotlib
+├── requirements-dev.txt          pinned: playwright, pillow (site checks only)
 ├── run_all.sh                    end-to-end reproduction
-├── check_site.py                 headless-browser checks + screenshots/GIF (dev tool)
+├── check_site.py                 browser checks (Chromium/WebKit/Firefox) + screenshots/GIF
 ├── .github/workflows/pages.yml   deploys site/ to GitHub Pages on push to main
 ├── train/
 │   ├── config.py                 RunConfig dataclass + the 4-run sweep (labels, descriptions)
@@ -165,18 +188,6 @@ Diagnostic plot: `notes/plots/phase1_sweep.png`.
   manifest ↔ files) and that first and final frames differ, which catches the
   snapshot-aliasing bug described in `notes/log.md`.
 
-**Reproduce** (from the repo root; 2–9 min per run on an Apple M3 CPU, see above):
-
-```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python train/train.py --run baseline     # likewise: no_decay, more_data, less_data
-.venv/bin/python train/project.py baseline no_decay more_data less_data
-.venv/bin/python train/export.py
-.venv/bin/python train/validate.py
-```
-
-or simply `./run_all.sh` (also regenerates the plots in `notes/plots/`).
-
 ### Phase 2 — The curves, online
 
 **What was built.** `site/`: a static page (plain HTML + vanilla JS +
@@ -197,31 +208,8 @@ GitHub Actions workflow publishes `site/` to GitHub Pages.
   desktop and phone sizes asserts no console errors or failed requests, that
   the chart renders, that keyboard, mouse-drag and touch move the readout, and
   that there's no horizontal scroll on mobile. Playwright is a dev-only
-  dependency, not in `requirements.txt`.
-
-**Preview locally**
-
-```bash
-cd site && python3 -m http.server 8000     # then open http://localhost:8000
-```
-
-(Opening `index.html` directly from disk won't work: browsers block `fetch`
-on `file://`. The page shows an error saying so.)
-
-**Run the headless check** (optional)
-
-```bash
-.venv/bin/pip install playwright && .venv/bin/python -m playwright install chromium
-.venv/bin/python check_site.py --screenshots
-```
-
-**Deploy to GitHub Pages**
-1. Create an empty repo on GitHub (e.g. `grokking-visualiser`), with no README.
-2. `git remote add origin git@github.com:<you>/grokking-visualiser.git && git push -u origin main`
-3. On GitHub: **Settings → Pages → Build and deployment → Source: "GitHub Actions"**.
-4. Re-run the "Deploy site to GitHub Pages" workflow from the **Actions** tab
-   (the first push may have run before Pages was enabled). The site goes live at
-   `https://<you>.github.io/grokking-visualiser/`.
+  dependency (`requirements-dev.txt`). Commands for previewing, checking and
+  deploying are under [How to reproduce](#how-to-reproduce).
 
 ### Phase 3 — Embeddings and the run toggle
 
@@ -268,3 +256,23 @@ Screenshots and the GIF (from `check_site.py --screenshots`): `notes/screenshots
 - Page weight: the initial view is ~103 KB gzipped (Chart.js ~70 KB, baseline
   run JSON ~24 KB, page/CSS/JS ~9 KB). The other runs (~24 KB gzipped each)
   load only when selected. `site/` contains nothing unused.
+
+### Review pass (after Phase 4)
+
+A full review of the code produced these fixes. All are covered by new
+`check_site.py` checks, which fail on the old code and pass on the new.
+- **Mobile scrolling:** the embedding canvas used `touch-action: none`, so a
+  swipe starting on it (most of a phone's width) couldn't scroll the page. It
+  now uses `manipulation`, and pinning uses `click`.
+- **Failed run load:** this left the new button pressed over the old data, with
+  no message. It now shows an error, reverts the toggle, and can be retried.
+- **Screen readers:** the readout's `aria-live` duplicated the slider's
+  `aria-valuetext` on every drag tick, so it was removed.
+- **Efficiency:** CSS colours and the 97 point colours are computed once instead
+  of on every slider move. `export.py` reads and checks every run before
+  touching `site/data/`.
+- **Pages workflow:** added the `actions: read` permission that
+  `deploy-pages` v4+ requires, and updated to the current major versions.
+- **Cross-browser:** checks now run in Chromium, WebKit (iPhone 13 profile) and
+  Firefox, and all pass.
+

@@ -28,7 +28,9 @@ const els = {
   legendMax: document.getElementById("legend-max"),
 };
 
-const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const rootStyle = getComputedStyle(document.documentElement);
+const css = (name) => rootStyle.getPropertyValue(name).trim();
+const COLORS = { train: css("--train"), test: css("--test"), marker: css("--marker") };
 const fmtInt = (n) => n.toLocaleString("en-US");
 const fmtPct = (x) => `${Math.round(x * 100)}%`;
 
@@ -76,7 +78,7 @@ const markerPlugin = {
     const { top, bottom } = chart.chartArea;
     const ctx = chart.ctx;
     ctx.save();
-    ctx.strokeStyle = css("--marker");
+    ctx.strokeStyle = COLORS.marker;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(x, top);
@@ -98,9 +100,9 @@ function buildCurveChart() {
   curveChart = new Chart(document.getElementById("curve"), {
     type: "line",
     data: { datasets: [
-      { label: "Train accuracy", data: [], borderColor: css("--train"), backgroundColor: css("--train"),
+      { label: "Train accuracy", data: [], borderColor: COLORS.train, backgroundColor: COLORS.train,
         borderWidth: 2.5, pointRadius: 0, tension: 0 },
-      { label: "Test accuracy (unseen examples)", data: [], borderColor: css("--test"), backgroundColor: css("--test"),
+      { label: "Test accuracy (unseen examples)", data: [], borderColor: COLORS.test, backgroundColor: COLORS.test,
         borderWidth: 2.5, borderDash: [7, 5], pointRadius: 0, tension: 0 },
     ] },
     options: {
@@ -143,6 +145,8 @@ function showRunOnChart(run) {
 
 const EMB_PAD = 14;      // CSS px inside the canvas edge
 const POINT_R = 4.5;     // CSS px
+const COARSE_POINTER = matchMedia("(pointer: coarse)").matches;
+let pointColors = [];    // viridis colour per number, computed once from manifest.p
 
 // Axis limits fixed across every frame of the run (so the plot doesn't
 // "pulse"), with equal scale on x and y and a small symmetric margin.
@@ -202,14 +206,13 @@ function drawEmbedding() {
   ctx.stroke();
 
   const frame = currentFrame();
-  const p = frame.coords.length;
   ctx.lineWidth = 0.75;
   ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
   frame.coords.forEach((xy, n) => {
     const [px, py] = toPx(xy);
     ctx.beginPath();
     ctx.arc(px, py, POINT_R, 0, Math.PI * 2);
-    ctx.fillStyle = viridis(n / (p - 1));
+    ctx.fillStyle = pointColors[n];
     ctx.fill();
     ctx.stroke();
   });
@@ -219,7 +222,7 @@ function drawEmbedding() {
     const [px, py] = toPx(frame.coords[n]);
     ctx.beginPath();
     ctx.arc(px, py, POINT_R + 4, 0, Math.PI * 2);
-    ctx.strokeStyle = css("--marker");
+    ctx.strokeStyle = COLORS.marker;
     ctx.lineWidth = 2;
     ctx.stroke();
   }
@@ -239,10 +242,11 @@ function updateTooltip() {
 }
 
 function nearestPoint(evt) {
+  if (!state.run) return null;
   const rect = els.embCanvas.getBoundingClientRect();
   const mx = evt.clientX - rect.left, my = evt.clientY - rect.top;
   const { toPx } = embGeometry();
-  let best = null, bestD = (evt.pointerType === "touch" ? 22 : 12) ** 2;
+  let best = null, bestD = (COARSE_POINTER ? 22 : 12) ** 2;
   currentFrame().coords.forEach((xy, n) => {
     const [px, py] = toPx(xy);
     const d = (px - mx) ** 2 + (py - my) ** 2;
@@ -259,17 +263,21 @@ function initEmbeddingInteraction() {
     if (n !== state.hover) { state.hover = n; drawEmbedding(); }
   });
   c.addEventListener("pointerleave", () => { state.hover = null; drawEmbedding(); });
-  // Click / tap pins a number so you can follow it through training.
-  c.addEventListener("pointerdown", (e) => {
+  // Click / tap pins a number so you can follow it through training. Uses
+  // "click" rather than "pointerdown" so a swipe that starts on the plot
+  // scrolls the page instead of pinning a point.
+  c.addEventListener("click", (e) => {
     const n = nearestPoint(e);
     state.pinned = n === state.pinned ? null : n;
     drawEmbedding();
   });
   new ResizeObserver(() => drawEmbedding()).observe(els.embBox);
 
+  const p = state.manifest.p;
+  pointColors = Array.from({ length: p }, (_, n) => viridis(n / (p - 1)));
   const stops = Array.from({ length: 11 }, (_, i) => `${viridis(i / 10)} ${i * 10}%`);
   els.legendBar.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
-  els.legendMax.textContent = String(state.manifest.p - 1);
+  els.legendMax.textContent = String(p - 1);
 }
 
 // ---- Slider + readout ----------------------------------------------------
@@ -309,7 +317,7 @@ function buildToggle() {
     b.querySelector(".run-desc").textContent = r.description;
     b.addEventListener("click", () => {
       history.replaceState(null, "", `#run=${r.id}`);
-      selectRun(r.id);
+      selectRun(r.id).catch(showError);
     });
     els.toggle.appendChild(b);
   }
@@ -325,10 +333,20 @@ let selectToken = 0;
 
 async function selectRun(id) {
   const token = ++selectToken;
-  for (const b of els.toggle.children) b.setAttribute("aria-pressed", String(b.dataset.run === id));
+  const markPressed = (rid) => {
+    for (const b of els.toggle.children) b.setAttribute("aria-pressed", String(b.dataset.run === rid));
+  };
+  markPressed(id);
   const prevStep = state.run ? state.run.steps[state.index] : null;
-  const run = await loadRun(id);
+  let run;
+  try {
+    run = await loadRun(id);
+  } catch (err) {
+    if (token === selectToken) markPressed(state.runId);  // keep the UI honest
+    throw err;
+  }
   if (token !== selectToken) return;  // a newer click won the race
+  els.error.hidden = true;
 
   state.runId = id;
   state.run = run;
@@ -350,7 +368,7 @@ function showError(err) {
     "Sorry, the training data couldn't be loaded. If you opened this file directly, " +
     "serve the site folder over HTTP instead (e.g. `python -m http.server`). " +
     `Details: ${err.message}`;
-  els.readout.textContent = "";
+  if (!state.run) els.readout.textContent = "";  // otherwise the current run stays usable
 }
 
 async function main() {
