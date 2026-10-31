@@ -18,9 +18,11 @@ identical, it memorises just as fast and is still at 3% on unseen sums after
 
 ## How to reproduce
 
-Tested on an Apple M3 MacBook (CPU), Python 3.14. One run takes ~4.5 min on
-its own (25,000 full-batch steps at ~13 ms/step on CPU). The four runs take
-~16 min if you train them in parallel.
+Tested on an Apple M3 MacBook (CPU), Python 3.14. Run time scales with the
+training-set size (full-batch): `less_data` ~2 min, `baseline` / `no_decay`
+~4.5 min each, `more_data` ~9 min. `./run_all.sh` runs them one after another
+in ~20 min total, and a from-scratch run of it reproduced `site/data/` and the
+plots byte-for-byte.
 
 ```bash
 python3 -m venv .venv
@@ -31,10 +33,10 @@ python3 -m venv .venv
 or step by step:
 
 ```bash
-.venv/bin/python train/train.py --run baseline     # ~4.5 min each
-.venv/bin/python train/train.py --run no_decay
-.venv/bin/python train/train.py --run more_data
-.venv/bin/python train/train.py --run less_data
+.venv/bin/python train/train.py --run baseline     # ~4.5 min
+.venv/bin/python train/train.py --run no_decay     # ~4.5 min
+.venv/bin/python train/train.py --run more_data    # ~9 min
+.venv/bin/python train/train.py --run less_data    # ~2 min
 .venv/bin/python train/project.py baseline no_decay more_data less_data
 .venv/bin/python train/export.py
 .venv/bin/python train/validate.py
@@ -163,7 +165,7 @@ Diagnostic plot: `notes/plots/phase1_sweep.png`.
   manifest ↔ files) and that first and final frames differ, which catches the
   snapshot-aliasing bug described in `notes/log.md`.
 
-**Reproduce** (from the repo root, ~5 min per run alone on an Apple M3 CPU):
+**Reproduce** (from the repo root; 2–9 min per run on an Apple M3 CPU, see above):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
