@@ -4,7 +4,7 @@ Watch a tiny neural network memorise modular arithmetic in 130 steps, then
 suddenly *generalise* thousands of steps later, and see that without weight
 decay it never does.
 
-**Live:** LIVE_URL  <!-- TODO(owner): replace with the GitHub Pages URL -->
+**Live:** [skape007-ult.github.io/grokking-visualiser/](https://skape007-ult.github.io/grokking-visualiser/)
 
 ![Dragging the step slider through training: test accuracy jumps late and the number embeddings organise into rings](notes/screenshots/scrub.gif)
 
