@@ -198,6 +198,52 @@ def check_facts():
         check(max(runs[r]["test_acc"]) < 0.5, f"[facts] {r} never reaches 50% test acc")
 
 
+def set_slider(page, idx):
+    page.evaluate(f"() => {{ const s = document.getElementById('step-slider'); s.value = {idx}; "
+                  "s.dispatchEvent(new Event('input')); }")
+
+
+def make_screenshots(browser, url):
+    """README/OG images and a GIF of the slider being dragged through training."""
+    from PIL import Image
+
+    SHOTS.mkdir(parents=True, exist_ok=True)
+    for rid in ("baseline", "no_decay"):
+        ctx, page, _, _ = open_page(browser, f"{url}#run={rid}", viewport={"width": 1280, "height": 900},
+                                    device_scale_factor=2)
+        wait_run(page, rid)
+        set_slider(page, 199)
+        page.screenshot(path=str(SHOTS / f"desktop_{rid}.png"))
+        ctx.close()
+
+    # Open Graph image (1200x630): the visualisation, scrolled into view.
+    ctx, page, _, _ = open_page(browser, url, viewport={"width": 1200, "height": 630})
+    set_slider(page, 199)
+    page.evaluate("() => window.scrollTo(0, document.getElementById('run-toggle').offsetTop - 12)")
+    page.screenshot(path=str(SITE / "og-image.png"))
+    ctx.close()
+
+    # GIF: drag the slider from step 1 to the end on the baseline run.
+    ctx, page, _, _ = open_page(browser, url, viewport={"width": 1100, "height": 1100})
+    box = page.locator(".viz").bounding_box()
+    clip = {"x": box["x"], "y": box["y"], "width": box["width"], "height": box["height"]}
+    frames = []
+    n = int(page.evaluate("() => document.getElementById('step-slider').max"))
+    indices = list(range(0, n + 1, 5)) + [n]
+    for i in indices:
+        set_slider(page, i)
+        png = page.screenshot(clip=clip)
+        im = Image.open(__import__("io").BytesIO(png)).convert("RGB")
+        im = im.resize((800, round(800 * im.height / im.width)), Image.LANCZOS)
+        frames.append(im.quantize(colors=255, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE))
+    ctx.close()
+    durations = [90] * (len(frames) - 1) + [2500]
+    frames[0].save(SHOTS / "scrub.gif", save_all=True, append_images=frames[1:],
+                   duration=durations, loop=0, optimize=True)
+    print(f"  info wrote screenshots + scrub.gif ({(SHOTS / 'scrub.gif').stat().st_size // 1024} KB, "
+          f"{len(frames)} frames) + site/og-image.png")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--screenshots", action="store_true", help="save to notes/screenshots/")
@@ -239,17 +285,7 @@ def main():
         check_hash(browser, url)
 
         if args.screenshots:
-            SHOTS.mkdir(parents=True, exist_ok=True)
-            for rid, idx in (("baseline", 199), ("no_decay", 199)):
-                ctx, page, _, _ = open_page(browser, f"{url}#run={rid}", viewport={"width": 1280, "height": 900},
-                                            device_scale_factor=2)
-                wait_run(page, rid)
-                page.evaluate(f"() => {{ const s = document.getElementById('step-slider'); s.value = {idx}; "
-                              "s.dispatchEvent(new Event('input')); }")
-                page.screenshot(path=str(SHOTS / f"desktop_{rid}.png"))
-                if rid == "baseline":
-                    page.screenshot(path=str(SHOTS / "desktop_full.png"), full_page=True)
-                ctx.close()
+            make_screenshots(browser, url)
 
         print("mobile 390x844")
         ctx, page, problems, _ = open_page(browser, url, viewport={"width": 390, "height": 844},
@@ -276,7 +312,6 @@ def main():
             page.evaluate("() => { const s = document.getElementById('step-slider'); s.value = 199; "
                           "s.dispatchEvent(new Event('input')); }")
             page.screenshot(path=str(SHOTS / "mobile.png"))
-            page.screenshot(path=str(SHOTS / "mobile_full.png"), full_page=True)
         ctx.close()
 
         browser.close()

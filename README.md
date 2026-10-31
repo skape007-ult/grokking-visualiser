@@ -1,10 +1,112 @@
 # Grokking Visualiser
 
-An interactive page that lets you watch a tiny neural network suddenly
-*generalise* on modular arithmetic, long after it has memorised its training
-data ("grokking"), and see that removing weight decay stops it happening.
+Watch a tiny neural network memorise modular arithmetic in 130 steps, then
+suddenly *generalise* 10,000 steps later, and see that without weight decay
+it never does.
 
-## Phase 0 — Make it grok
+**Live:** LIVE_URL  <!-- TODO(owner): replace with the GitHub Pages URL -->
+
+![Dragging the step slider through training: test accuracy jumps late and the number embeddings organise into rings](notes/screenshots/scrub.gif)
+
+## The finding
+
+A 1-layer transformer trained on 30% of all `(a + b) mod 97` sums hits 99%
+training accuracy by step 130, but only crosses 95% on unseen sums at step
+10,065, about 77× later. With weight decay switched off and everything else
+identical, it memorises just as fast and is still at 3% on unseen sums after
+25,000 steps.
+
+## How to reproduce
+
+Tested on an Apple M3 MacBook (CPU), Python 3.14. One run takes ~4.5 min on
+its own (25,000 full-batch steps at ~13 ms/step on CPU). The four runs take
+~16 min if you train them in parallel.
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+./run_all.sh                     # train all 4 runs, project, export, validate, plot
+```
+
+or step by step:
+
+```bash
+.venv/bin/python train/train.py --run baseline     # ~4.5 min each
+.venv/bin/python train/train.py --run no_decay
+.venv/bin/python train/train.py --run more_data
+.venv/bin/python train/train.py --run less_data
+.venv/bin/python train/project.py baseline no_decay more_data less_data
+.venv/bin/python train/export.py
+.venv/bin/python train/validate.py
+cd site && python3 -m http.server 8000             # open http://localhost:8000
+```
+
+Runs are deterministic (seeded, `torch.use_deterministic_algorithms`, CPU),
+so this regenerates `site/data/` byte-for-byte on the same software stack.
+Optional browser check (needs `pip install playwright && python -m playwright install chromium`):
+`.venv/bin/python check_site.py --screenshots`.
+
+## Project structure
+
+```
+grokking-visualiser/
+├── README.md
+├── requirements.txt              pinned: torch, numpy, matplotlib
+├── run_all.sh                    end-to-end reproduction
+├── check_site.py                 headless-browser checks + screenshots/GIF (dev tool)
+├── .github/workflows/pages.yml   deploys site/ to GitHub Pages on push to main
+├── train/
+│   ├── config.py                 RunConfig dataclass + the 4-run sweep (labels, descriptions)
+│   ├── data.py                   (a + b) mod p dataset, seeded train/test split
+│   ├── model.py                  1-layer transformer (Nanda et al. style, no LayerNorm)
+│   ├── train.py                  one run: train, log-spaced metrics, embedding snapshots
+│   ├── project.py                fixed-basis PCA (fit on final snapshot, project all frames)
+│   ├── export.py                 the only writer of site/data/ (rounded, contract-shaped JSON)
+│   ├── validate.py               asserts site/data/ matches the data contract
+│   └── plot.py                   diagnostic plots + milestone summaries
+├── site/
+│   ├── index.html                page + explanation text
+│   ├── app.js                    chart, embedding canvas, slider, run toggle
+│   ├── style.css                 layout (responsive, single column < 720px)
+│   ├── og-image.png              social preview image
+│   └── data/                     manifest.json + runs/*.json (generated, committed)
+├── notes/
+│   ├── log.md                    dated work log of every attempt + summary
+│   ├── plots/                    phase0_baseline.png, phase1_sweep.png
+│   └── screenshots/              desktop, mobile, scrub.gif
+└── outputs/                      (gitignored) raw metrics + embedding snapshots
+```
+
+## What I'd do next
+
+- Check how robust the timing is: rerun across several seeds (one 1e-8
+  perturbation already moved the grokking step by ~5%).
+- Find out whether `less_data` groks with a longer budget (100k+ steps), or
+  never does.
+- Sweep weight decay between 0 and 1 to find where grokking turns on, and
+  how the delay scales.
+- Explain the rings: they are not ordered by number value, which is
+  consistent with Nanda et al.'s Fourier-feature account but not verified here.
+- Add finer embedding snapshots around the transition (steps 7k–12k), where the
+  40 log-spaced frames are sparse.
+
+## References
+
+- Power, Burda, Edwards, Babuschkin & Misra (2022). *Grokking: Generalization
+  Beyond Overfitting on Small Algorithmic Datasets.* [arXiv:2201.02177](https://arxiv.org/abs/2201.02177)
+- Nanda, Chan, Lieberum, Smith & Steinhardt (2023). *Progress measures for
+  grokking via mechanistic interpretability.* [arXiv:2301.05217](https://arxiv.org/abs/2301.05217)
+
+Demo video: VIDEO_URL  <!-- TODO(owner): add the demo video link -->
+
+---
+
+## Appendix: build notes by phase
+
+What was built in each phase and why the key decisions were made. The full
+dated log, including failures, is in [`notes/log.md`](notes/log.md).
+
+### Phase 0 — Make it grok
 
 **What was built.** A config-driven training pipeline (`train/`) for a
 1-layer transformer on `(a + b) mod 97`, and a baseline run that reproduces
@@ -33,7 +135,7 @@ for thousands of steps, then jumps to 95% at step ~10 000
   `--set key=value` rather than edited constants, and the full config is saved
   next to every result.
 
-## Phase 1 — Sweep and export
+### Phase 1 — Sweep and export
 
 **What was built.** Four runs that differ from `baseline` in exactly one
 variable, a fixed-basis PCA projection of the embeddings, and an exporter +
@@ -73,7 +175,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 or simply `./run_all.sh` (also regenerates the plots in `notes/plots/`).
 
-## Phase 2 — The curves, online
+### Phase 2 — The curves, online
 
 **What was built.** `site/`: a static page (plain HTML + vanilla JS +
 Chart.js 4.4.1 from jsDelivr, no build step) showing train and test
@@ -119,7 +221,7 @@ on `file://`. The page shows an error saying so.)
    (the first push may have run before Pages was enabled). The site goes live at
    `https://<you>.github.io/grokking-visualiser/`.
 
-## Phase 3 — Embeddings and the run toggle
+### Phase 3 — Embeddings and the run toggle
 
 **What was built.**
 - *Embedding panel:* the 97 number embeddings in each run's fixed 2-D PCA
@@ -147,5 +249,20 @@ on `file://`. The page shows an error saying so.)
   generated in JS: easy for a human to edit, still impossible to go stale
   silently.
 
-Screenshots (from `check_site.py --screenshots`): `notes/screenshots/`.
+Screenshots and the GIF (from `check_site.py --screenshots`): `notes/screenshots/`. Below: the same moment (step 25,000) with and without weight decay.
 
+<img src="notes/screenshots/desktop_baseline.png" width="49%" alt="Standard training at step 25,000: test accuracy 100%, embeddings form rings"> <img src="notes/screenshots/desktop_no_decay.png" width="49%" alt="No weight decay at step 25,000: test accuracy 3%, embeddings remain a cloud">
+
+### Phase 4 — Polish
+
+- `<title>`, meta description, Open Graph / Twitter card tags (preview image
+  `site/og-image.png`, generated by `check_site.py`), an inline SVG favicon
+  (no extra request, no 404).
+- Chart.js is pinned to 4.4.1 with a Subresource Integrity hash.
+- Accessibility: segmented run buttons are real `<button>`s with
+  `aria-pressed`; the slider has a label and an `aria-valuetext` that mirrors
+  the readout; visible focus rings; everything works from the keyboard (Tab to
+  a run, Enter/Space to select, arrows/Home/End on the slider).
+- Page weight: the initial view is ~103 KB gzipped (Chart.js ~70 KB, baseline
+  run JSON ~24 KB, page/CSS/JS ~9 KB). The other runs (~24 KB gzipped each)
+  load only when selected. `site/` contains nothing unused.

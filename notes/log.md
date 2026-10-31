@@ -169,3 +169,63 @@ No training runs in these phases. Notes for the writeup:
 - Initial view transfers ~150 KB uncompressed (page, CSS, JS, manifest,
   baseline run, Chart.js from the CDN); other runs load only when selected.
 
+---
+
+# Summary (for the writeup)
+
+**Goal.** Reproduce grokking (Power et al. 2022) on `(a + b) mod 97` with a
+1-layer transformer following Nanda et al. 2023, and build an interactive
+page that shows it, plus the effect of weight decay and dataset size.
+
+**Phase 0 took 1 attempt.** The starting hyperparameters (wd 1.0, 30% data,
+lr 1e-3, betas (0.9, 0.98), full batch, no LayerNorm, 10-step warmup) grokked
+first time. Nothing failed for hyperparameter reasons. The failures were
+engineering bugs:
+1. **Nondeterminism.** CPU embedding-gather backward differed by ~1e-8 between
+   identical runs; fixed with `torch.use_deterministic_algorithms(True)`. That
+   tiny noise moved the grokking step by ~5% (test 95% at 10 525 vs 10 003).
+2. **Recording schedule.** Rounding log-spaced steps to integers left 160
+   distinct steps instead of 200 (and 38 snapshots instead of 40). Fixed by
+   growing the raw count until enough distinct steps survive.
+3. **Snapshot aliasing.** Every embedding "snapshot" was a view of the live
+   weights, so all frames showed the final state. Caught by plotting, fixed
+   with `.clone()`, now guarded by `validate.py`.
+4. **A racy test.** The headless check read the readout before a newly
+   selected run had loaded, so it "passed" while looking at the previous run.
+   Fixed by waiting on an explicit render signal and comparing against the JSON.
+
+**Final outcome per run** (seed 0, 25 000 steps; first recorded step at threshold):
+
+| run | train ≥99% | test ≥50% | test ≥95% | final test acc | as hypothesised? |
+|---|---|---|---|---|---|
+| baseline (wd 1.0, 30%) | 130 | 8 939 | 10 065 | 100% | yes: groks, ~77× delay |
+| no_decay (wd 0, 30%) | 125 | never | never | 3.0% (max 3.05%) | yes: never generalises |
+| more_data (wd 1.0, 60%) | 130 | 125 | 378 | 100% | yes: essentially no delay |
+| less_data (wd 1.0, 15%) | 111 | never | never | 0.5% (max 1.04%) | yes, within the 25k budget |
+
+**Surprising / worth mentioning.**
+- How *easy* it was: the published recipe worked unmodified at p = 97 with
+  4-token inputs.
+- Test accuracy isn't flat before the jump. On a log axis it creeps from ~2% to
+  ~21% over steps 150–7 600, then jumps to 93% by 9 675. Train loss also
+  plateaus (~3e-7) and then drops again exactly at the transition, so the
+  reorganisation is visible even on the training set.
+- During memorisation, test loss *rises* to ~28 (confidently wrong), then
+  collapses to ~2e-7.
+- Without weight decay, train loss reaches 5.6e-11 and test loss 56.7: the
+  network keeps sharpening its memorised answers instead of simplifying.
+- Embeddings: the grokked runs form concentric rings in their top-2 PCs, but
+  the rings aren't ordered by number value. Non-grokked runs stay as clouds,
+  and their top-2 PCs explain much less variance (8% / 16% vs 27% / 24%).
+- A tiny numerical perturbation (1e-8) shifted the grokking step by 5%.
+  Single-seed step counts should be quoted as approximate.
+
+**Next steps** (all deliberately out of scope here):
+- Multiple seeds per configuration, to put error bars on the grokking step.
+- Run `less_data` for 100k+ steps: delayed or never?
+- Sweep weight decay (e.g. 0, 0.03, 0.1, 0.3, 1, 3) to find where grokking
+  turns on and how the delay scales.
+- Fourier analysis of the embeddings (which key frequencies; does the ring
+  order follow k·a mod p?), following Nanda et al.
+- Other operations (subtraction, division mod p), and denser snapshots around
+  the transition for a smoother embedding animation.
