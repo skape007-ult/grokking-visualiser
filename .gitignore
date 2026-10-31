@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Raw training outputs (metrics + raw embedding snapshots) and checkpoints.
+# Only the exported JSON in site/data/ is committed.
+outputs/
+*.pt
+*.ckpt
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
