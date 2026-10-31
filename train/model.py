@@ -1,7 +1,10 @@
 """A tiny transformer following Nanda et al. 2023.
 
 No LayerNorm, learned positional embeddings, untied embedding / unembedding,
-ReLU MLP. Initialisation mirrors Nanda's reference code (Gaussian scaled by
+ReLU MLP. Leaving out LayerNorm is deliberate: Nanda et al. removed it so the
+trained network is easier to interpret (no per-token normalisation mixing
+directions), and it still trains and groks reliably at this size.
+Initialisation mirrors Nanda's reference code (Gaussian scaled by
 1/sqrt(fan_in), zero biases).
 """
 

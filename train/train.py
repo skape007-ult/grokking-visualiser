@@ -1,11 +1,13 @@
 """Train one run: record metrics at log-spaced steps and snapshot embeddings.
 
 Usage (from the repo root):
-    python train/train.py --run baseline
+    python train/train.py --run baseline              # base seed
+    python train/train.py --run baseline --seed 1     # -> outputs/baseline__seed1
     python train/train.py --run baseline --set train_frac=0.25 --tag attempt2
 
-Writes outputs/<tag or id>/run.json (config + metrics) and embeddings.npy
-(raw number-token embedding snapshots, n_snapshots x p x d_model).
+Writes outputs/<name>/run.json (config + metrics) and embeddings.npy
+(raw number-token embedding snapshots, n_snapshots x p x d_model), where
+<name> is --tag if given, else cfg.output_name.
 """
 
 from __future__ import annotations
@@ -113,6 +115,8 @@ def train(cfg: RunConfig, out_name: str | None = None) -> Path:
     record_set = set(record)
     metrics = {k: [] for k in ("steps", "train_loss", "test_loss", "train_acc", "test_acc")}
     emb_steps, emb = [], []
+    next_dense = None        # next extra recording step while test acc is moving
+    last_snap_acc = None     # test acc at the most recent snapshot
 
     t0 = time.time()
     for step in range(1, cfg.steps + 1):
@@ -122,14 +126,30 @@ def train(cfg: RunConfig, out_name: str | None = None) -> Path:
         opt.step()
         sched.step()
 
-        if step in record_set:
+        if step in record_set or step == next_dense:
             tr_l, tr_a = evaluate(model, train_x, train_y, loss_dtype)
             te_l, te_a = evaluate(model, test_x, test_y, loss_dtype)
+            prev_step = metrics["steps"][-1] if metrics["steps"] else None
+            prev_acc = metrics["test_acc"][-1] if metrics["test_acc"] else None
             for k, v in zip(metrics, (step, tr_l, te_l, tr_a, te_a)):
                 metrics[k].append(v)
-            if step in snaps:
+
+            # Densify recording where test accuracy moves fast (rate is per
+            # e-fold of steps, so it's comparable across the log schedule).
+            # Recording reads metrics only; it never affects training.
+            next_dense = None
+            if prev_step is not None:
+                rate = abs(te_a - prev_acc) / np.log(step / prev_step)
+                if rate >= cfg.dense_trigger_rate:
+                    next_dense = max(step + 1, round(step * (1 + cfg.dense_ratio)))
+                    if next_dense >= cfg.steps:
+                        next_dense = None
+
+            moved = last_snap_acc is not None and abs(te_a - last_snap_acc) >= cfg.snapshot_delta
+            if step in snaps or moved:
                 emb_steps.append(step)
                 emb.append(model.number_embeddings(cfg.p).float().cpu().numpy())
+                last_snap_acc = te_a
             if step in snaps or step == cfg.steps:
                 print(
                     f"[{cfg.id}] step {step:>6}  train {tr_a:6.1%} ({tr_l:.3g})  "
@@ -137,7 +157,7 @@ def train(cfg: RunConfig, out_name: str | None = None) -> Path:
                     flush=True,
                 )
 
-    out = OUTPUTS / (out_name or cfg.id)
+    out = OUTPUTS / (out_name or cfg.output_name)
     out.mkdir(parents=True, exist_ok=True)
     np.save(out / "embeddings.npy", np.stack(emb))
     (out / "run.json").write_text(
@@ -163,11 +183,14 @@ def train(cfg: RunConfig, out_name: str | None = None) -> Path:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", default="baseline", choices=sorted(RUNS))
+    ap.add_argument("--seed", type=int, help="override the seed (output goes to <id>__seed<N>)")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                     help="override a config field (for exploratory attempts)")
     ap.add_argument("--tag", help="output directory name (defaults to the run id)")
     args = ap.parse_args()
     cfg = RUNS[args.run].config
+    if args.seed is not None:
+        cfg = cfg.with_overrides(seed=args.seed)
     for a in args.set:
         cfg = parse_override(cfg, a)
     train(cfg, args.tag)

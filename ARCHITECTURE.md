@@ -46,7 +46,16 @@ The project is two halves that only meet through JSON files:
 - **`RunSpec`**: a `RunConfig` plus how the site presents it (`label`,
   `description`).
 - **`SWEEP`**: the four runs, in display order. Each differs from `BASELINE` in
-  exactly one field. **`RUNS`** indexes them by id.
+  exactly one field. **`RUNS`** indexes them by id; **`RUN_ORDER`** lists the
+  ids. `validate.py` reads the expected order from here, so the run list
+  lives in one place.
+- **`SEEDS`** = (0, 1, 2) and **`seed_configs(spec)`**: every condition is
+  trained once per seed. The base seed (0) is the run shown in full on the
+  site; the others are drawn as faint accuracy curves.
+- **`RunConfig.output_name`**: `outputs/` directory name, i.e. `baseline` for the
+  base seed and `baseline__seed1` for the others.
+- `python train/config.py runs|seeds|outputs` prints those lists (used by
+  `run_all.sh`).
 - **`parse_override(cfg, "key=value")`**: applies a command-line `--set`,
   casting the value to the field's type (used for exploratory attempts).
 
@@ -60,6 +69,8 @@ The project is two halves that only meet through JSON files:
 
 ### 3. Model — `train/model.py`
 
+- No LayerNorm, deliberately: Nanda et al. left it out so the trained network
+  is easier to interpret, and it still groks reliably at this size.
 - **`Transformer`**: token embedding `W_E` (p+2 × d_model) + learned positional
   embedding `W_pos`, `n_layers` × `Block`, then an unembedding `W_U`
   (d_model × p) that reads only the final (`=`) position. Logits cover the p
@@ -76,7 +87,7 @@ The project is two halves that only meet through JSON files:
 
 ### 4. Training — `train/train.py`
 
-`python train/train.py --run <id> [--set key=value …] [--tag name]`
+`python train/train.py --run <id> [--seed N] [--set key=value …] [--tag name]`
 
 - **`set_seed(seed)`** seeds Python, NumPy and torch (and CUDA if present), and
   turns on `torch.use_deterministic_algorithms`. Together with the CPU device,
@@ -87,6 +98,15 @@ The project is two halves that only meet through JSON files:
   1 to `final`. This is where metrics are recorded.
 - **`snapshot_steps(record, n)`**: n of those steps, also log-spaced, where the
   embedding matrix is saved. Always includes the first and final step.
+- **Adaptive extras** (inside `train`):
+  - When test accuracy is changing fast (≥ `dense_trigger_rate` per e-fold of
+    steps), the next recording is only `dense_ratio` = 2% of steps later,
+    instead of the base ~5%.
+  - An embedding snapshot is also taken whenever test accuracy has moved
+    `snapshot_delta` = 5 points since the last one.
+  - So the grokking transition, which log spacing would cover with only two
+    frames, gets dense frames. Recording only reads metrics, so it never
+    changes training.
 - **`evaluate(model, x, y, dtype)`**: loss and accuracy on a full split, no grad.
 - **`train(cfg, out_name)`**: full-batch AdamW with a linear warmup, for
   `cfg.steps` steps. At each recorded step it evaluates on the full train and
@@ -115,9 +135,10 @@ The project is two halves that only meet through JSON files:
 
 - **`r(x)`** rounds floats (recursively) to 4 decimal places and rejects
   NaN/Inf.
-- **`build()`** reads every run in `SWEEP` from `outputs/`. It refuses any run
+- **`build()`** reads every run × seed from `outputs/`. It refuses any run
   whose saved config differs from the one in `config.py` (stale outputs), and
-  assembles the manifest and per-run JSON in memory.
+  assembles the manifest and per-run JSON in memory. The base seed supplies
+  the full data. The other seeds supply `seed_runs` (accuracy curves only).
 - **`export()`** calls `build()` first, so a missing or stale run aborts
   before anything is written. It then replaces `site/data/runs/` and writes
   `manifest.json`. Run files are compact (~70 KB each, ~24 KB gzipped).
@@ -136,6 +157,8 @@ It checks every rule of the data contract:
   - no NaN/Inf, and values are rounded to 4 dp
 - **Frames:** sorted, a subset of `steps`, and include the first and final
   step. Each has exactly p `[x, y]` pairs.
+- **Seeds:** `seed_runs` plus the main run cover exactly `SEEDS`. Each seed's
+  steps run from 1 to the final step, with matching-length accuracies in [0, 1].
 - **Size and sanity:** each file is ≤ 200 KB, and the first and final frames
   differ (this catches the snapshot-aliasing bug).
 
@@ -145,8 +168,8 @@ It checks every rule of the data contract:
   final metrics), as used in the log.
 - `curve <dir> <png>`: accuracy and loss curves for one run
   (`notes/plots/phase0_baseline.png`).
-- `sweep <png> <dirs…>`: side-by-side accuracy curves for all runs
-  (`notes/plots/phase1_sweep.png`).
+- `sweep <png>`: side-by-side accuracy curves for every condition, base seed
+  bold and other seeds faint (`notes/plots/phase1_sweep.png`).
 
 ## The data contract
 
@@ -173,10 +196,11 @@ the config-style subtitle.
 | field | shape | meaning |
 |---|---|---|
 | `config` | object | the full `RunConfig` that produced the run |
-| `steps` | `[n]` ints | recorded steps, 1 … final, strictly increasing (n = 200) |
+| `steps` | `[n]` ints | recorded steps, 1 … final, strictly increasing (200 log-spaced + adaptive extras) |
 | `train_acc`, `test_acc` | `[n]` floats in [0, 1] | accuracy on the full split at each step |
 | `train_loss`, `test_loss` | `[n]` floats ≥ 0 | cross-entropy at each step |
-| `embedding_frames` | `[m]` of `{step, coords}` | m = 40 frames; `step` ∈ `steps`; `coords[i]` = 2-D position of number i (p entries) |
+| `embedding_frames` | `[m]` of `{step, coords}` | 40 log-spaced frames + adaptive extras; `step` ∈ `steps`; `coords[i]` = 2-D position of number i (p entries) |
+| `seed_runs` | `[k]` of `{seed, steps, train_acc, test_acc}` | the same condition trained with the other seeds; each has its own `steps` |
 
 All floats are rounded to 4 dp. `validate.py` enforces all of this.
 
@@ -225,9 +249,17 @@ embedding axis limits, hovered and pinned number) and plain functions:
   canvas crisp and square.
 
 **Slider and readout**
-- `setIndex(i)`: moves the slider and marker, then updates the readout text,
-  `aria-valuetext` and the embedding frame.
-- `nearestIndex(run, step)`: finds the equivalent position when switching runs.
+- The slider has `SLIDER_POSITIONS` (400) log-uniform positions.
+  `positionIndex(run)` maps each one to the nearest recorded step (cached per
+  run). The slider therefore moves evenly on the log axis even though
+  recording is denser around the transition. Switching runs keeps the
+  position.
+- `setPosition(pos)`: moves the marker, then updates the readout,
+  `aria-valuetext` and the embedding frame. The embedding canvas's
+  `aria-label` is rewritten for each frame (run, step, test accuracy), as its
+  text alternative.
+- `showRunOnChart(run)` also draws `seed_runs` as faint lines behind the main
+  ones, hidden from the legend and tooltips, with a caption naming the seeds.
 
 **Run toggle**
 - `buildToggle()`: creates one `<button aria-pressed>` per manifest run.
@@ -291,6 +323,7 @@ no build step: the site is the files in `site/`.
 2. `python train/train.py --run <id>`, then
    `python train/project.py <all ids>`, `python train/export.py`, and
    `python train/validate.py`.
-3. `validate.py` and `check_site.py` hard-code the four current run ids
-   (`EXPECTED_ORDER`, `check_toggle`), so update those lists too. The page
-   itself builds its buttons from the manifest and needs no changes.
+3. Nothing else needs changing: `validate.py` takes the run order from
+   `config.py`, and both the page and `check_site.py` build the button list
+   from the manifest. Only the explanation text (`check_facts` in
+   `check_site.py`) names specific runs.

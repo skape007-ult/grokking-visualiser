@@ -10,10 +10,11 @@ import math
 import sys
 from pathlib import Path
 
+from config import RUN_ORDER, SEEDS
+
 SITE_DATA = Path(__file__).resolve().parent.parent / "site" / "data"
 MAX_BYTES = 200 * 1024
 METRICS = ("train_acc", "test_acc", "train_loss", "test_loss")
-EXPECTED_ORDER = ["baseline", "no_decay", "more_data", "less_data"]
 
 errors: list[str] = []
 
@@ -69,6 +70,23 @@ def validate_run(entry, p):
     check(fsteps == sorted(set(fsteps)), f"{rid}: frame steps not strictly ascending")
     check(all(s in step_set for s in fsteps), f"{rid}: frame step not in steps")
     check(fsteps[0] == steps[0] and fsteps[-1] == steps[-1], f"{rid}: frames must include first and final step")
+    # Other seeds of the same condition (accuracy curves only).
+    seed_runs = d.get("seed_runs")
+    if check(isinstance(seed_runs, list), f"{rid}: missing seed_runs"):
+        seeds = [sr.get("seed") for sr in seed_runs]
+        check(sorted([cfg.get("seed")] + seeds) == sorted(SEEDS),
+              f"{rid}: seeds {[cfg.get('seed')] + seeds} != SEEDS {list(SEEDS)}")
+        for sr in seed_runs:
+            tag = f"{rid}/seed{sr.get('seed')}"
+            ss = sr["steps"]
+            check(ss == sorted(set(ss)) and ss[0] == 1 and ss[-1] == steps[-1],
+                  f"{tag}: steps must be strictly increasing from 1 to the final step")
+            for m in ("train_acc", "test_acc"):
+                arr = sr[m]
+                check(len(arr) == len(ss), f"{tag}: len({m}) != len(steps)")
+                check(all(is_num(v) and 0 <= v <= 1 and max_decimals_ok(v) for v in arr),
+                      f"{tag}: {m} must be finite, in [0, 1], 4 dp")
+
     # Guards against snapshots aliasing the live weights (all frames equal).
     check(frames[0]["coords"] != frames[-1]["coords"], f"{rid}: first and final frames are identical")
     for f in frames:
@@ -86,7 +104,7 @@ def main():
     check(isinstance(p, int) and p > 1, "manifest: bad p")
     check(isinstance(manifest.get("operation"), str), "manifest: missing operation")
     ids = [e["id"] for e in manifest["runs"]]
-    check(ids == EXPECTED_ORDER, f"manifest: run order {ids} != {EXPECTED_ORDER}")
+    check(ids == RUN_ORDER, f"manifest: run order {ids} != config.SWEEP order {RUN_ORDER}")
     for e in manifest["runs"]:
         for k in ("id", "label", "description", "weight_decay", "train_frac", "file"):
             check(k in e, f"manifest entry {e.get('id')}: missing {k!r}")

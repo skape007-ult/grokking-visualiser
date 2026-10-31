@@ -1,8 +1,8 @@
 # Grokking Visualiser
 
 Watch a tiny neural network memorise modular arithmetic in 130 steps, then
-suddenly *generalise* 10,000 steps later, and see that without weight decay
-it never does.
+suddenly *generalise* thousands of steps later, and see that without weight
+decay it never does.
 
 **Live:** LIVE_URL  <!-- TODO(owner): replace with the GitHub Pages URL -->
 
@@ -11,18 +11,43 @@ it never does.
 ## The finding
 
 A 1-layer transformer trained on 30% of all `(a + b) mod 97` sums hits 99%
-training accuracy by step 130, but only crosses 95% on unseen sums at step
-10,065, about 77× later. With weight decay switched off and everything else
-identical, it memorises just as fast and is still at 3% on unseen sums after
-25,000 steps.
+training accuracy by step ~130, but only crosses 95% on unseen sums thousands
+of steps later: at step 4,216, 5,785 and 9,868 in three seeds. With weight
+decay switched off and everything else identical, none of the three seeds
+generalises. They memorise just as fast and are still at 3–4% on unseen sums
+after 25,000 steps.
+
+| setting (3 seeds each) | test acc ≥ 95% at step | final test acc |
+|---|---|---|
+| Standard (weight decay 1.0, 30% of data) | 4,216 / 5,785 / 9,868 | 100% / 100% / 100% |
+| No weight decay | never | 3.0% / 4.1% / 4.3% |
+| More data (60%) | 269 / 370 / 489 | 100% in all three |
+| Less data (15%) | never | 0.4–1.1% (chance ≈ 1%) |
+
+## Limitations
+
+- **One task, one prime, one architecture:** addition mod 97 with a 1-layer
+  transformer. Other operations, primes and model sizes are untested here.
+- **Three seeds per setting.** Enough to show none of the results is a
+  one-run fluke, but too few to characterise the timing distribution. The
+  grokking step already varies 2.3× across them.
+- **"Never" means "not within 25,000 steps".** The no-decay and less-data runs
+  might generalise much later.
+- **The 2-D embedding view is lossy:** the top two PCA directions capture only
+  8–27% of the embedding variance. It shows dominant structure, not
+  everything the network learned.
+- **Timing is sensitive to tiny numerical differences:** a ~1e-8 change once
+  shifted the grokking step by 5%. Treat single step numbers as approximate.
 
 ## How to reproduce
 
-Tested on an Apple M3 MacBook (CPU), Python 3.14. Run time scales with the
-training-set size (full-batch): `less_data` ~2 min, `baseline` / `no_decay`
-~4.5 min each, `more_data` ~9 min. `./run_all.sh` runs them one after another
-in ~20 min total (`JOBS=4 ./run_all.sh` trains them in parallel: ~17.5 min, identical
-results). A from-scratch run reproduced `site/data/` and the plots
+Tested on an Apple M3 MacBook (CPU), Python 3.14. Each of the 4 settings is
+trained with 3 seeds (12 runs). Run time scales with the training-set size
+(full-batch): on its own a run takes ~2 min (`less_data`), ~4.5 min
+(`baseline`, `no_decay`) or ~9 min (`more_data`), so `./run_all.sh` takes about
+an hour. `JOBS=4 ./run_all.sh` trains in parallel with identical results (54 min
+measured; the M3 has 4 performance cores, so the gain is small). Runs are
+deterministic, and a from-scratch rerun reproduced `site/data/` and the plots
 byte-for-byte.
 
 ```bash
@@ -34,10 +59,9 @@ python3 -m venv .venv
 or step by step:
 
 ```bash
-.venv/bin/python train/train.py --run baseline     # ~4.5 min
-.venv/bin/python train/train.py --run no_decay     # ~4.5 min
-.venv/bin/python train/train.py --run more_data    # ~9 min
-.venv/bin/python train/train.py --run less_data    # ~2 min
+.venv/bin/python train/train.py --run baseline             # ~4.5 min (seed 0)
+.venv/bin/python train/train.py --run baseline --seed 1    # likewise seeds 1, 2 and the
+                                                           # other runs: no_decay, more_data, less_data
 .venv/bin/python train/project.py baseline no_decay more_data less_data
 .venv/bin/python train/export.py
 .venv/bin/python train/validate.py
@@ -75,13 +99,14 @@ How each piece works, function by function, and the JSON contract between
 grokking-visualiser/
 ├── README.md
 ├── ARCHITECTURE.md               how every stage and file works
+├── LICENSE                       MIT
 ├── requirements.txt              pinned: torch, numpy, matplotlib
 ├── requirements-dev.txt          pinned: playwright, pillow (site checks only)
 ├── run_all.sh                    end-to-end reproduction
 ├── check_site.py                 browser checks (Chromium/WebKit/Firefox) + screenshots/GIF
 ├── .github/workflows/pages.yml   deploys site/ to GitHub Pages on push to main
 ├── train/
-│   ├── config.py                 RunConfig dataclass + the 4-run sweep (labels, descriptions)
+│   ├── config.py                 RunConfig dataclass, the 4-run sweep, the seeds
 │   ├── data.py                   (a + b) mod p dataset, seeded train/test split
 │   ├── model.py                  1-layer transformer (Nanda et al. style, no LayerNorm)
 │   ├── train.py                  one run: train, log-spaced metrics, embedding snapshots
@@ -104,16 +129,14 @@ grokking-visualiser/
 
 ## What I'd do next
 
-- Check how robust the timing is: rerun across several seeds (one 1e-8
-  perturbation already moved the grokking step by ~5%).
+- Measure the timing distribution properly: 10–20 seeds per setting (three
+  seeds already span 4,216–9,868 steps).
 - Find out whether `less_data` groks with a longer budget (100k+ steps), or
   never does.
 - Sweep weight decay between 0 and 1 to find where grokking turns on, and
   how the delay scales.
 - Explain the rings: they are not ordered by number value, which is
   consistent with Nanda et al.'s Fourier-feature account but not verified here.
-- Add finer embedding snapshots around the transition (steps 7k–12k), where the
-  40 log-spaced frames are sparse.
 
 ## References
 
@@ -128,8 +151,10 @@ Demo video: VIDEO_URL  <!-- TODO(owner): add the demo video link -->
 
 ## Appendix: build notes by phase
 
-What was built in each phase and why the key decisions were made. The full
-dated log, including failures, is in [`notes/log.md`](notes/log.md).
+What was built in each phase and why the key decisions were made. Numbers
+here are as of each phase (seed 0 only until the review passes); the current
+results are in [The finding](#the-finding). The full dated log, including
+failures, is in [`notes/log.md`](notes/log.md).
 
 ### Phase 0 — Make it grok
 
@@ -141,6 +166,9 @@ for thousands of steps, then jumps to 95% at step ~10 000
 `notes/log.md`.
 
 **Key decisions and why.**
+- *No LayerNorm, deliberately.* Nanda et al. removed it to make the trained
+  network easier to interpret (no per-token normalisation mixing directions),
+  and it still groks reliably at this size.
 - *Follow Nanda et al. 2023 closely* (no LayerNorm, learned positional
   embeddings, untied embed/unembed, AdamW lr 1e-3, wd 1.0, betas (0.9, 0.98),
   10-step warmup, full batch, 30% data) because it is the most reliable known
@@ -275,4 +303,24 @@ A full review of the code produced these fixes. All are covered by new
   `deploy-pages` v4+ requires, and updated to the current major versions.
 - **Cross-browser:** checks now run in Chromium, WebKit (iPhone 13 profile) and
   Firefox, and all pass.
+
+### Second review pass: seeds and robustness
+
+- **Three seeds per setting** (`SEEDS` in `config.py`, `--seed` on
+  `train.py`). Every conclusion held in all three: standard training groks
+  (95% at 4,216 / 5,785 / 9,868), no weight decay never does (3–4% final),
+  more data has almost no delay, and less data stays at chance. The site
+  draws the other two seeds as faint lines, and the explanation text quotes
+  ranges, checked against the data by `check_site.py`.
+- **Denser frames around the transition.** Log spacing put only two
+  embedding frames between 21% and 94% test accuracy, so the rings appeared
+  to snap into place. Recording is now adaptive (extra records while test
+  accuracy moves fast, plus a snapshot every 5 points of test accuracy),
+  giving 10 frames across that window. The slider uses 400 log-uniform
+  positions, so it still moves evenly.
+- **Accessibility:** the embedding canvas's `aria-label` now describes the
+  current frame (run, step, test accuracy), as its text alternative.
+- **One source of truth for the run list:** `validate.py` reads it from
+  `config.py`, and `check_site.py` from the manifest.
+- Limitations section, the LayerNorm rationale, and an MIT `LICENSE`.
 

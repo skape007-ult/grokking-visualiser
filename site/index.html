@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#fbfaf7">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Grokking Visualiser">
-  <meta property="og:description" content="Watch a neural network memorise in 130 steps, then suddenly generalise 10,000 steps later — and see what happens without weight decay.">
+  <meta property="og:description" content="Watch a neural network memorise in 130 steps, then suddenly generalise thousands of steps later — and see what happens without weight decay.">
   <!-- TODO(owner): Open Graph needs an absolute URL: replace with LIVE_URL/og-image.png once the site is live. -->
   <meta property="og:image" content="og-image.png">
   <meta property="og:image:width" content="1200">
@@ -37,20 +37,21 @@
         <h2 id="curve-title">Accuracy during training</h2>
         <div class="chart-box"><canvas id="curve" role="img"
           aria-label="Train and test accuracy against training step, log scale"></canvas></div>
+        <p class="caption" id="seed-note"></p>
       </section>
 
       <section class="panel" aria-labelledby="emb-title">
         <h2 id="emb-title">Embeddings of the numbers 0–96
           <span class="frame-label" id="frame-label"></span></h2>
         <div class="emb-box" id="emb-box">
-          <canvas id="embedding" role="img"
+          <canvas id="embedding" role="img" aria-describedby="emb-caption"
             aria-label="Scatter plot of the 97 number embeddings projected to two dimensions"></canvas>
           <div class="emb-tooltip" id="emb-tooltip" hidden></div>
         </div>
         <div class="legend" aria-hidden="true">
           <span>0</span><span class="legend-bar" id="legend-bar"></span><span id="legend-max">96</span>
         </div>
-        <p class="caption">
+        <p class="caption" id="emb-caption">
           Each dot is one number's learned embedding, flattened to 2D (fixed axes
           per run). Watch whether the cloud organises into rings, and when.
         </p>
@@ -83,22 +84,38 @@
         30% of them (2,823 sums) and trained for 25,000 steps, then tested on the
         remaining 70% it had never seen. Training used the AdamW optimiser with
         weight decay 1.0, a penalty that constantly nudges the network's weights
-        towards zero. The other settings each change exactly one thing from that setup.
+        towards zero. Following Nanda et al., the model deliberately has no
+        LayerNorm, which makes it easier to interpret. Each other setting changes
+        exactly one thing, and every setting was trained with three different
+        random seeds.
       </p>
       <p>
-        <strong>What the toggle shows.</strong> In standard training the network
-        hits 99% on its training examples by step
+        <strong>What the toggle shows.</strong> In standard training (bold lines,
+        seed 0) the network hits 99% on its training examples by step
         <span data-fact="baseline.train99">130</span>, but only crosses 95% on unseen
-        examples at step <span data-fact="baseline.test95">10,065</span>,
-        <span data-fact="baseline.ratio">77</span>&times; later.
-        <strong>Remove weight decay and generalisation never comes:</strong> the
-        network memorises just as fast, yet after 25,000 steps it is still right on only
-        <span data-fact="no_decay.finalTest">3%</span> of unseen examples, and its
-        embeddings never form rings. With twice the data (60%), there is barely a
-        delay: 95% on unseen examples by step <span data-fact="more_data.test95">378</span>.
-        With half the data (15%), unseen accuracy stays at chance
-        (<span data-fact="less_data.finalTest">1%</span> at step 25,000). It may
-        still grok later, but not within this training budget.
+        examples at step <span data-fact="baseline.test95">9,868</span>,
+        <span data-fact="baseline.ratio">76</span>&times; later. The timing depends
+        on the seed: in the other two (faint lines) it came at steps
+        <span data-fact="baseline.otherTest95">5,785 and 4,216</span>. The delay
+        is real every time, but its length varies by more than 2&times;.
+        <strong>Remove weight decay and generalisation never came, in any of the
+        three seeds:</strong> they memorise just as fast, yet after 25,000 steps
+        they are right on only <span data-fact="no_decay.finalTestRange">3–4%</span>
+        of unseen examples, and the embeddings never form rings. With twice the
+        data (60%) there is barely a delay: 95% on unseen examples by step
+        <span data-fact="more_data.test95Range">269–489</span>. With half the
+        data (15%), unseen accuracy never rose above
+        <span data-fact="less_data.maxTest">2%</span> (chance is 1%) in any seed.
+        Those runs may still grok later, but not within this training budget.
+      </p>
+      <p>
+        <strong>Limits.</strong> This is one task (addition mod 97), one small
+        architecture and one 25,000-step budget. Three seeds per setting is
+        enough to show the effect isn't a fluke of one run, but not enough to
+        pin down how the timing is distributed. "Never" means "not within 25,000
+        steps". The embedding panel squeezes 128 dimensions into 2, and those two
+        directions capture under a third of the variance. It shows the dominant
+        structure, not everything the network has learned.
       </p>
       <p class="refs">
         Papers: Power et al. (2022),

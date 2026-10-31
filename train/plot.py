@@ -2,7 +2,7 @@
 
     python train/plot.py summary outputs/baseline [outputs/...]
     python train/plot.py curve   outputs/baseline notes/plots/phase0_baseline.png
-    python train/plot.py sweep   notes/plots/phase1_sweep.png outputs/baseline outputs/no_decay ...
+    python train/plot.py sweep   notes/plots/phase1_sweep.png      (every run x seed in config.py)
 """
 
 from __future__ import annotations
@@ -72,12 +72,20 @@ def curve(run_dir, out_png):
     print(f"wrote {out_png}")
 
 
-def sweep(out_png, run_dirs):
-    runs = [load(d) for d in run_dirs]
-    fig, axes = plt.subplots(1, len(runs), figsize=(4.2 * len(runs), 3.8), sharey=True)
-    for ax, run in zip(axes, runs):
-        c = run["config"]
-        _axes_curve(ax, run, f"{c['id']}  (wd={c['weight_decay']}, frac={c['train_frac']})")
+def sweep(out_png):
+    """One panel per condition: base seed bold, other seeds as faint lines."""
+    from config import SWEEP, seed_configs
+
+    outputs = Path(__file__).resolve().parent.parent / "outputs"
+    fig, axes = plt.subplots(1, len(SWEEP), figsize=(4.2 * len(SWEEP), 3.8), sharey=True)
+    for ax, spec in zip(axes, SWEEP):
+        base, *others = [load(outputs / c.output_name) for c in seed_configs(spec)]
+        for o in others:
+            ax.plot(o["steps"], o["train_acc"], color="#1f77b4", alpha=0.3, lw=1)
+            ax.plot(o["steps"], o["test_acc"], color="#d62728", alpha=0.3, lw=1, linestyle="--")
+        c = base["config"]
+        _axes_curve(ax, base, f"{c['id']}  (wd={c['weight_decay']}, frac={c['train_frac']})")
+    fig.suptitle("bold: seed 0; faint: other seeds", fontsize=9, y=0.995)
     fig.tight_layout()
     fig.savefig(out_png, dpi=110)
     print(f"wrote {out_png}")
@@ -91,7 +99,7 @@ def main():
     elif cmd == "curve":
         curve(*args)
     elif cmd == "sweep":
-        sweep(args[0], args[1:])
+        sweep(args[0])
     else:
         sys.exit(__doc__)
 

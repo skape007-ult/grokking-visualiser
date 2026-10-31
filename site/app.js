@@ -1,5 +1,5 @@
-// Grokking Visualiser front end. Consumes only site/data/ (see the Data
-// Contract in the README); all paths are relative so it works under a
+// Grokking Visualiser front end. Consumes only site/data/ (see the data
+// contract in ARCHITECTURE.md); all paths are relative so it works under a
 // GitHub Pages subpath and from `python -m http.server`.
 "use strict";
 
@@ -7,7 +7,8 @@ const state = {
   manifest: null,
   runId: null,
   run: null,          // the loaded run JSON for runId
-  index: 0,           // slider position = index into run.steps
+  pos: 0,             // slider position, 0..SLIDER_POSITIONS (log-uniform in step)
+  index: 0,           // index into run.steps shown at that position
   embLimits: null,    // fixed embedding axis limits for the current run
   hover: null,        // number under the pointer (tooltip)
   pinned: null,       // number selected by click/tap, highlighted across frames
@@ -26,7 +27,13 @@ const els = {
   frameLabel: document.getElementById("frame-label"),
   legendBar: document.getElementById("legend-bar"),
   legendMax: document.getElementById("legend-max"),
+  seedNote: document.getElementById("seed-note"),
 };
+
+// The slider moves over log-uniform positions (~2.6% of steps apart), each
+// mapped to the nearest recorded step. It therefore moves evenly along the log
+// axis even though recording is denser around the grokking transition.
+const SLIDER_POSITIONS = 400;
 
 const rootStyle = getComputedStyle(document.documentElement);
 const css = (name) => rootStyle.getPropertyValue(name).trim();
@@ -96,15 +103,23 @@ function logTick(value) {
 
 let curveChart = null;
 
+const mainDatasets = () => [
+  { label: "Train accuracy", data: [], borderColor: COLORS.train, backgroundColor: COLORS.train,
+    borderWidth: 2.5, pointRadius: 0, tension: 0, main: true, order: 0 },
+  { label: "Test accuracy (unseen examples)", data: [], borderColor: COLORS.test, backgroundColor: COLORS.test,
+    borderWidth: 2.5, borderDash: [7, 5], pointRadius: 0, tension: 0, main: true, order: 0 },
+];
+
+// Faint curves for the same setup trained with other seeds (behind the main lines).
+const seedDataset = (label, color, pts, dash) => ({
+  label, data: pts, borderColor: `${color}55`, borderWidth: 1.25, borderDash: dash,
+  pointRadius: 0, tension: 0, main: false, order: 1,
+});
+
 function buildCurveChart() {
   curveChart = new Chart(document.getElementById("curve"), {
     type: "line",
-    data: { datasets: [
-      { label: "Train accuracy", data: [], borderColor: COLORS.train, backgroundColor: COLORS.train,
-        borderWidth: 2.5, pointRadius: 0, tension: 0 },
-      { label: "Test accuracy (unseen examples)", data: [], borderColor: COLORS.test, backgroundColor: COLORS.test,
-        borderWidth: 2.5, borderDash: [7, 5], pointRadius: 0, tension: 0 },
-    ] },
+    data: { datasets: mainDatasets() },
     options: {
       animation: false,
       maintainAspectRatio: false,
@@ -120,8 +135,9 @@ function buildCurveChart() {
              ticks: { stepSize: 0.25, callback: (v) => fmtPct(v) } },
       },
       plugins: {
-        legend: { labels: { boxWidth: 28, boxHeight: 2 } },
+        legend: { labels: { boxWidth: 28, boxHeight: 2, filter: (item, data) => data.datasets[item.datasetIndex].main } },
         tooltip: {
+          filter: (item) => item.dataset.main,
           callbacks: {
             title: (items) => `Step ${fmtInt(items[0].parsed.x)}`,
             label: (item) => `${item.dataset.label}: ${fmtPct(item.parsed.y)}`,
@@ -134,11 +150,24 @@ function buildCurveChart() {
 }
 
 function showRunOnChart(run) {
-  const pts = (ys) => run.steps.map((s, i) => ({ x: s, y: ys[i] }));
-  curveChart.data.datasets[0].data = pts(run.train_acc);
-  curveChart.data.datasets[1].data = pts(run.test_acc);
+  const pts = (steps, ys) => steps.map((s, i) => ({ x: s, y: ys[i] }));
+  const [train, test] = mainDatasets();
+  train.data = pts(run.steps, run.train_acc);
+  test.data = pts(run.steps, run.test_acc);
+  const seeds = run.seed_runs || [];
+  curveChart.data.datasets = [
+    train, test,
+    ...seeds.flatMap((sr) => [
+      seedDataset(`Train, seed ${sr.seed}`, COLORS.train, pts(sr.steps, sr.train_acc), []),
+      seedDataset(`Test, seed ${sr.seed}`, COLORS.test, pts(sr.steps, sr.test_acc), [4, 4]),
+    ]),
+  ];
   curveChart.options.scales.x.max = run.steps[run.steps.length - 1];
   curveChart.update("none");
+  els.seedNote.textContent = seeds.length
+    ? `Bold lines: seed ${run.config.seed}. Faint lines: the same setup trained with ` +
+      `seed${seeds.length > 1 ? "s" : ""} ${seeds.map((s) => s.seed).join(" and ")}.`
+    : "";
 }
 
 // ---- Embedding scatter (hand-drawn canvas, crisp on high-DPI) -------------
@@ -228,6 +257,13 @@ function drawEmbedding() {
   }
 
   els.frameLabel.textContent = `· step ${fmtInt(frame.step)}`;
+  // Text alternative for the canvas, kept in step with what is drawn.
+  const label = state.manifest.runs.find((r) => r.id === state.runId)?.label ?? "";
+  const fi = state.run.steps.indexOf(frame.step);
+  els.embCanvas.setAttribute("aria-label",
+    `Scatter plot of the learned embeddings of the numbers 0 to ${pointColors.length - 1}, ` +
+    `flattened to two dimensions, for "${label}" at training step ${fmtInt(frame.step)}, ` +
+    `when test accuracy was ${fmtPct(state.run.test_acc[fi])}.`);
   updateTooltip();
 }
 
@@ -282,26 +318,34 @@ function initEmbeddingInteraction() {
 
 // ---- Slider + readout ----------------------------------------------------
 
-function setIndex(i) {
+// For each slider position, the index of the recorded step nearest to it on
+// the log scale. Computed once per run and cached on the run object.
+function positionIndex(run) {
+  if (!run._posIndex) {
+    const logs = run.steps.map(Math.log);
+    const logFinal = logs[logs.length - 1];
+    let j = 0;
+    run._posIndex = Array.from({ length: SLIDER_POSITIONS + 1 }, (_, p) => {
+      const t = (logFinal * p) / SLIDER_POSITIONS;
+      while (j + 1 < logs.length && Math.abs(logs[j + 1] - t) <= Math.abs(logs[j] - t)) j++;
+      return j;
+    });
+  }
+  return run._posIndex;
+}
+
+function setPosition(pos) {
   const run = state.run;
-  state.index = Math.max(0, Math.min(run.steps.length - 1, i));
+  state.pos = Math.max(0, Math.min(SLIDER_POSITIONS, pos));
+  state.index = positionIndex(run)[state.pos];
   const step = run.steps[state.index];
   const text = `Step ${fmtInt(step)} — train ${fmtPct(run.train_acc[state.index])}, ` +
                `test ${fmtPct(run.test_acc[state.index])}`;
   els.readout.textContent = text;
-  els.slider.value = String(state.index);
+  els.slider.value = String(state.pos);
   els.slider.setAttribute("aria-valuetext", text);
   curveChart.draw();  // redraw marker only; no data change, no animation
   drawEmbedding();
-}
-
-// Index in `run` whose step is nearest (on the log scale) to `step`.
-function nearestIndex(run, step) {
-  let best = 0;
-  run.steps.forEach((s, i) => {
-    if (Math.abs(Math.log(s) - Math.log(step)) < Math.abs(Math.log(run.steps[best]) - Math.log(step))) best = i;
-  });
-  return best;
 }
 
 // ---- Run toggle ----------------------------------------------------------
@@ -337,7 +381,7 @@ async function selectRun(id) {
     for (const b of els.toggle.children) b.setAttribute("aria-pressed", String(b.dataset.run === rid));
   };
   markPressed(id);
-  const prevStep = state.run ? state.run.steps[state.index] : null;
+  const firstLoad = !state.run;
   let run;
   try {
     run = await loadRun(id);
@@ -352,10 +396,9 @@ async function selectRun(id) {
   state.run = run;
   state.embLimits = embeddingLimits(run);
   showRunOnChart(run);
-  els.slider.max = String(run.steps.length - 1);
   els.slider.disabled = false;
-  // Keep the slider at the equivalent step; start at the end on first load.
-  setIndex(prevStep === null ? run.steps.length - 1 : nearestIndex(run, prevStep));
+  // Keep the slider where it is (same log-step position); start at the end.
+  setPosition(firstLoad ? SLIDER_POSITIONS : state.pos);
   document.body.dataset.run = id;  // the run actually rendered (used by check_site.py)
 }
 
@@ -378,7 +421,8 @@ async function main() {
     buildCurveChart();
     buildToggle();
     initEmbeddingInteraction();
-    els.slider.addEventListener("input", () => setIndex(Number(els.slider.value)));
+    els.slider.max = String(SLIDER_POSITIONS);
+    els.slider.addEventListener("input", () => setPosition(Number(els.slider.value)));
     window.addEventListener("hashchange", () => selectRun(runFromHash()).catch(showError));
     await selectRun(runFromHash());
   } catch (err) {

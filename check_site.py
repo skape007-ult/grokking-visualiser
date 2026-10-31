@@ -17,6 +17,7 @@ import argparse
 import functools
 import http.server
 import json
+import math
 import re
 import sys
 import threading
@@ -27,6 +28,8 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parent
 SITE = ROOT / "site"
 SHOTS = ROOT / "notes" / "screenshots"
+
+SLIDER_END = 400  # app.js SLIDER_POSITIONS
 
 failures: list[str] = []
 
@@ -109,8 +112,10 @@ def check_slider(page, label):
     check(at_start.startswith("Step 1 —"), f"[{label}] Home key -> step 1 ({at_start!r})")
     check(page.locator("#frame-label").inner_text() == "· step 1", f"[{label}] embedding shows frame at step 1")
     ink_start = page.evaluate("() => document.getElementById('embedding').toDataURL()")
-    page.keyboard.press("ArrowRight")
-    check(readout(page) != at_start, f"[{label}] ArrowRight changes readout ({readout(page)!r})")
+    # Slider positions are log-uniform; the first few all map to step 1.
+    for _ in range(30):
+        page.keyboard.press("ArrowRight")
+    check(readout(page) != at_start, f"[{label}] arrow keys change readout ({readout(page)!r})")
     box = slider.bounding_box()
     y = box["y"] + box["height"] / 2
     page.mouse.move(box["x"] + 4, y)
@@ -125,6 +130,18 @@ def check_slider(page, label):
     frame_step = int(page.locator("#frame-label").inner_text().split("step ")[1].replace(",", ""))
     step = int(re.match(r"Step ([\d,]+)", dragged).group(1).replace(",", ""))
     check(frame_step <= step, f"[{label}] embedding frame step {frame_step} <= slider step {step}")
+    aria = page.locator("#embedding").get_attribute("aria-label")
+    check(f"step {frame_step:,}" in aria and "test accuracy was" in aria,
+          f"[{label}] embedding canvas has a text alternative for the shown frame ({aria[-70:]!r})")
+
+    # Slider positions are log-uniform: equal slider travel = equal log-step distance.
+    steps_at = page.evaluate("""() => { const s = document.getElementById('step-slider'), out = [];
+        for (const v of [100, 200, 300]) { s.value = v; s.dispatchEvent(new Event('input'));
+            out.push(+document.getElementById('readout').textContent.match(/Step ([\\d,]+)/)[1].replace(/,/g, '')); }
+        return out; }""")
+    ratios = [math.log(steps_at[1] / steps_at[0]), math.log(steps_at[2] / steps_at[1])]
+    check(abs(ratios[0] - ratios[1]) < 0.15 * ratios[0],
+          f"[{label}] slider moves evenly on the log axis (steps at 1/4, 1/2, 3/4: {steps_at})")
 
 
 def wait_run(page, rid):
@@ -141,16 +158,26 @@ def fmt_readout(rid, step_label):
 
 def check_toggle(page, label):
     ids = [b.get_attribute("data-run") for b in page.locator("#run-toggle button").all()]
-    check(ids == ["baseline", "no_decay", "more_data", "less_data"], f"[{label}] toggle buttons from manifest {ids}")
+    manifest_ids = [r["id"] for r in json.loads((SITE / "data" / "manifest.json").read_text())["runs"]]
+    check(ids == manifest_ids, f"[{label}] toggle buttons match the manifest {ids}")
     step_before = readout(page).split(" —")[0]
+    pos_before = page.locator("#step-slider").input_value()
     for rid in ids[1:] + ids[:1]:
         page.locator(f"#run-toggle button[data-run={rid}]").click()
         wait_run(page, rid)
         check(pressed_run(page) == rid and page.url.endswith(f"#run={rid}"),
               f"[{label}] click {rid}: pressed + hash ({page.url.split('/')[-1]})")
-        check(readout(page).split(" —")[0] == step_before, f"[{label}] {rid}: slider keeps step ({readout(page)!r})")
-        expected = fmt_readout(rid, step_before)
+        shown = readout(page).split(" —")[0]
+        a, b = (int(x.removeprefix("Step ").replace(",", "")) for x in (step_before, shown))
+        check(page.locator("#step-slider").input_value() == pos_before and abs(math.log(a / b)) < 0.03,
+              f"[{label}] {rid}: slider keeps its position ({step_before} -> {shown})")
+        expected = fmt_readout(rid, shown)
         check(readout(page) == expected, f"[{label}] {rid}: readout shows this run's data ({expected!r})")
+        n_seed = len(json.loads((SITE / "data" / "runs" / f"{rid}.json").read_text())["seed_runs"])
+        counts = page.evaluate("() => { const c = Chart.getChart('curve'); return [c.data.datasets.length, "
+                               "c.legend.legendItems.length]; }")
+        check(counts == [2 + 2 * n_seed, 2],
+              f"[{label}] {rid}: {n_seed} other seeds drawn as faint lines, legend shows 2 ({counts})")
     page.locator("#run-toggle button[data-run=no_decay]").click()
     wait_run(page, "no_decay")
     page.locator("#step-slider").focus()
@@ -172,30 +199,46 @@ def check_hash(browser, url, name):
 
 
 def check_facts():
-    """Explanation numbers in index.html must match the exported data."""
+    """Explanation numbers in index.html must match the exported data (all seeds)."""
     runs = {r: json.loads((SITE / "data" / "runs" / f"{r}.json").read_text())
             for r in ("baseline", "no_decay", "more_data", "less_data")}
 
     def first(run, key, thr):
-        return next(s for s, v in zip(run["steps"], run[key]) if v >= thr)
+        return next((s for s, v in zip(run["steps"], run[key]) if v >= thr), None)
+
+    def all_seeds(rid):
+        return [runs[rid]] + runs[rid]["seed_runs"]
+
+    def pct(x):
+        return f"{int(x * 100 + 0.5)}"
+
+    def span(values, fmt):
+        lo, hi = min(values), max(values)
+        return fmt(lo) if fmt(lo) == fmt(hi) else f"{fmt(lo)}–{fmt(hi)}"
 
     b = runs["baseline"]
+    other95 = [first(sr, "test_acc", 0.95) for sr in b["seed_runs"]]
     expected = {
         "baseline.train99": f"{first(b, 'train_acc', 0.99):,}",
         "baseline.test95": f"{first(b, 'test_acc', 0.95):,}",
         "baseline.ratio": f"{round(first(b, 'test_acc', 0.95) / first(b, 'train_acc', 0.99))}",
-        "no_decay.finalTest": f"{round(runs['no_decay']['test_acc'][-1] * 100)}%",
-        "more_data.test95": f"{first(runs['more_data'], 'test_acc', 0.95):,}",
-        "less_data.finalTest": f"{round(runs['less_data']['test_acc'][-1] * 100)}%",
+        "baseline.otherTest95": " and ".join(f"{s:,}" for s in other95),
+        "no_decay.finalTestRange": span([r["test_acc"][-1] for r in all_seeds("no_decay")], pct) + "%",
+        "more_data.test95Range": span([first(r, "test_acc", 0.95) for r in all_seeds("more_data")],
+                                      lambda s: f"{s:,}"),
+        "less_data.maxTest": f"{pct(max(max(r['test_acc']) for r in all_seeds('less_data')))}%",
     }
     html = (SITE / "index.html").read_text()
-    found = dict(re.findall(r'data-fact="([\w.]+)">([^<]+)<', html))
+    found = {k: re.sub(r"\s+", " ", v) for k, v in re.findall(r'data-fact="([\w.]+)">([^<]+)<', html)}
     for k, v in expected.items():
         check(found.get(k) == v, f"[facts] {k}: page says {found.get(k)!r}, data says {v!r}")
     check(set(found) == set(expected), f"[facts] every data-fact span is checked {sorted(set(found) ^ set(expected))}")
-    # Claims that runs never reached 50% must hold.
-    for r in ("no_decay", "less_data"):
-        check(max(runs[r]["test_acc"]) < 0.5, f"[facts] {r} never reaches 50% test acc")
+    # Claims in the text that must hold for every seed.
+    check(all(first(r, "test_acc", 0.95) for r in all_seeds("baseline")), "[facts] every baseline seed groks")
+    for rid in ("no_decay", "less_data"):
+        check(all(max(r["test_acc"]) < 0.5 for r in all_seeds(rid)), f"[facts] no {rid} seed reaches 50% test acc")
+    all95 = [first(r, "test_acc", 0.95) for r in all_seeds("baseline")]
+    check(max(all95) / min(all95) > 2, f"[facts] baseline timing varies by more than 2x across seeds ({all95})")
 
 
 def set_slider(page, idx):
@@ -212,13 +255,13 @@ def make_screenshots(browser, url):
         ctx, page, _, _ = open_page(browser, f"{url}#run={rid}", viewport={"width": 1280, "height": 900},
                                     device_scale_factor=2)
         wait_run(page, rid)
-        set_slider(page, 199)
+        set_slider(page, SLIDER_END)
         page.screenshot(path=str(SHOTS / f"desktop_{rid}.png"))
         ctx.close()
 
     # Open Graph image (1200x630): the visualisation, scrolled into view.
     ctx, page, _, _ = open_page(browser, url, viewport={"width": 1200, "height": 630})
-    set_slider(page, 199)
+    set_slider(page, SLIDER_END)
     page.evaluate("() => window.scrollTo(0, document.getElementById('run-toggle').offsetTop - 12)")
     page.screenshot(path=str(SITE / "og-image.png"))
     ctx.close()
@@ -229,7 +272,7 @@ def make_screenshots(browser, url):
     clip = {"x": box["x"], "y": box["y"], "width": box["width"], "height": box["height"]}
     frames = []
     n = int(page.evaluate("() => document.getElementById('step-slider').max"))
-    indices = list(range(0, n + 1, 5)) + [n]
+    indices = list(range(0, n + 1, 8)) + [n]
     for i in indices:
         set_slider(page, i)
         png = page.screenshot(clip=clip)
@@ -323,7 +366,7 @@ def check_mobile(browser, url, label, mobile_ctx, screenshots=False):
     if screenshots:
         page.locator("#run-toggle button[data-run=baseline]").tap()
         wait_run(page, "baseline")
-        set_slider(page, 199)
+        set_slider(page, SLIDER_END)
         page.screenshot(path=str(SHOTS / "mobile.png"))
     ctx.close()
 

@@ -13,7 +13,7 @@ import math
 import shutil
 from pathlib import Path
 
-from config import SWEEP
+from config import SWEEP, seed_configs
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUTS = ROOT / "outputs"
@@ -34,16 +34,22 @@ def r(x):
     return x
 
 
+def load_run(cfg) -> dict:
+    """outputs/<name>/run.json, refusing outputs produced by a different config."""
+    run = json.loads((OUTPUTS / cfg.output_name / "run.json").read_text())
+    if run["config"] != cfg.to_dict():
+        raise SystemExit(f"{cfg.output_name}: outputs/ were produced by a different config; re-train")
+    return run
+
+
 def build() -> tuple[dict, dict[str, dict]]:
     """Read every run from outputs/ and return (manifest, {relative path: run data})."""
     manifest = {"p": None, "operation": None, "runs": []}
     files = {}
     for spec in SWEEP:
-        cfg = spec.config
-        run = json.loads((OUTPUTS / cfg.id / "run.json").read_text())
-        proj = json.loads((OUTPUTS / cfg.id / "projected.json").read_text())
-        if run["config"] != cfg.to_dict():
-            raise SystemExit(f"{cfg.id}: outputs/ were produced by a different config; re-train")
+        cfg, *other_seeds = seed_configs(spec)
+        run = load_run(cfg)
+        proj = json.loads((OUTPUTS / cfg.output_name / "projected.json").read_text())
 
         rel = f"runs/{cfg.id}.json"
         files[rel] = {
@@ -56,6 +62,13 @@ def build() -> tuple[dict, dict[str, dict]]:
             "embedding_frames": [
                 {"step": s, "coords": r(c)}
                 for s, c in zip(proj["embedding_steps"], proj["coords"])
+            ],
+            # Same condition, other seeds: accuracy curves only (each has its
+            # own steps, since the adaptive recording depends on the run).
+            "seed_runs": [
+                {"seed": c.seed, "steps": o["steps"],
+                 "train_acc": r(o["train_acc"]), "test_acc": r(o["test_acc"])}
+                for c, o in ((c, load_run(c)) for c in other_seeds)
             ],
         }
         manifest["p"], manifest["operation"] = cfg.p, cfg.operation

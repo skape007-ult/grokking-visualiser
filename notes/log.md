@@ -194,16 +194,21 @@ engineering bugs:
    selected run had loaded, so it "passed" while looking at the previous run.
    Fixed by waiting on an explicit render signal and comparing against the JSON.
 
-**Final outcome per run** (seed 0, 25 000 steps; first recorded step at threshold):
+**Final outcome per run**: three seeds each (0 / 1 / 2), 25 000 steps, first
+recorded step at threshold, with adaptive recording (see the 2026-10-31 entry).
+The original seed-0-only table is in the Phase 1 entry.
 
 | run | train ≥99% | test ≥50% | test ≥95% | final test acc | as hypothesised? |
 |---|---|---|---|---|---|
-| baseline (wd 1.0, 30%) | 130 | 8 939 | 10 065 | 100% | yes: groks, ~77× delay |
-| no_decay (wd 0, 30%) | 125 | never | never | 3.0% (max 3.05%) | yes: never generalises |
-| more_data (wd 1.0, 60%) | 130 | 125 | 378 | 100% | yes: essentially no delay |
-| less_data (wd 1.0, 15%) | 111 | never | never | 0.5% (max 1.04%) | yes, within the 25k budget |
+| baseline (wd 1.0, 30%) | 130 / 130 / 130 | 8 939 / 4 563 / 3 744 | 9 868 / 5 785 / 4 216 | 100% ×3 | yes, all 3 grok; delay 32–76× |
+| no_decay (wd 0, 30%) | 125 / 120 / 120 | never ×3 | never ×3 | 3.0% / 4.1% / 4.3% | yes, none generalise |
+| more_data (wd 1.0, 60%) | 128 / 128 / 138 | 124 / 120 / 133 | 370 / 269 / 489 | 100% ×3 | yes, essentially no delay |
+| less_data (wd 1.0, 15%) | 111 / 111 / 111 | never ×3 | never ×3 | 0.5% / 0.4% / 1.1% (max 1.6%) | yes, within the 25k budget |
 
 **Surprising / worth mentioning.**
+- **Seed 0 was the slowest of three to grok** (9 868 vs 5 785 and 4 216). The
+  single-seed "77× later" headline overstated the typical delay; across seeds
+  it's 32–76×. Same qualitative story, very different number.
 - How *easy* it was: the published recipe worked unmodified at p = 97 with
   4-token inputs.
 - Test accuracy isn't flat before the jump. On a log axis it creeps from ~2% to
@@ -221,14 +226,14 @@ engineering bugs:
   Single-seed step counts should be quoted as approximate.
 
 **Next steps** (all deliberately out of scope here):
-- Multiple seeds per configuration, to put error bars on the grokking step.
+- 10–20 seeds per configuration, to characterise the grokking-step
+  distribution (three seeds already span 4 216–9 868).
 - Run `less_data` for 100k+ steps: delayed or never?
 - Sweep weight decay (e.g. 0, 0.03, 0.1, 0.3, 1, 3) to find where grokking
   turns on and how the delay scales.
 - Fourier analysis of the embeddings (which key frequencies; does the ring
   order follow k·a mod p?), following Nanda et al.
-- Other operations (subtraction, division mod p), and denser snapshots around
-  the transition for a smoother embedding animation.
+- Other operations (subtraction, division mod p), other primes, deeper models.
 
 ## 2026-10-30 — Final reproducibility check
 Moved `outputs/` aside and ran `./run_all.sh` from scratch (sequential, 1 180 s
@@ -268,3 +273,60 @@ export and deploy side:
   sequential, ~11% faster; a from-scratch `JOBS=4` run regenerated `site/data/`
   and the plots byte-for-byte). Only ~11% because the 4 runs contend for the
   M3's 4 performance cores.
+
+## 2026-10-31 — Second review pass: seeds and transition frames
+
+Prompted by an external review: the central claim (weight decay is what makes
+generalisation happen) rested on n = 1 per condition.
+
+**Recording change (made first, since seed 0 had to be re-run anyway).**
+In the old baseline only 2 embedding frames covered test accuracy 21% → 94%
+(steps 7 631 and 9 675), so the rings appeared to snap in. New config fields:
+- `dense_trigger_rate = 0.2`: when |Δtest_acc| per e-fold of steps exceeds
+  this, the next record comes 2% of steps later (`dense_ratio`) instead of
+  the base ~5%.
+- `snapshot_delta = 0.05`: snapshot whenever test accuracy has moved 5 points
+  since the last snapshot.
+
+Recording reads metrics only and never touches training, so the trajectories
+are unchanged. Seed 0's final losses are identical to before. The
+first-crossing numbers moved slightly because the transition is sampled more
+finely: baseline test ≥95% at 9 868 (was 10 065), more_data 370 (was 378),
+more_data train ≥99% at 128 (was 130). The baseline now has 10 frames between
+21% and 94% test accuracy. File sizes are 77–98 KB (limit 200 KB).
+no_decay and less_data never trigger dense recording, since their test
+accuracy barely moves.
+
+**Seeds.** `SEEDS = (0, 1, 2)` for every condition: 12 runs, trained 4 at a
+time in 3 261 s (54 min) on the M3. Results (seed 0 / 1 / 2):
+- baseline: groks in all three. Test ≥95% at **9 868 / 5 785 / 4 216**, a 2.3×
+  spread. Train ≥99% at 130 in all three.
+- no_decay: **never generalises in any seed.** Final test 3.0% / 4.1% / 4.3%,
+  max 4.4%.
+- more_data: 95% at 370 / 269 / 489. Essentially no delay in all three.
+- less_data: chance in all three. Final 0.5% / 0.4% / 1.1%, max 1.6%.
+
+**Interpretation.** The qualitative claims are robust to seed: weight decay is
+needed (0/3 without, 3/3 with), more data removes the delay, and less data
+stalls. The *timing* is not robust. Seed 0 happened to be the slowest, so the
+old "77×" figure overstated the typical delay. The site and README now quote
+ranges, and `check_site.py` verifies them against all seeds.
+
+**Other changes in this pass:**
+- **Site:** faint lines for seeds 1–2, and a log-uniform slider (400 positions
+  mapped to the nearest recorded step), so dense recording doesn't make the
+  slider uneven. The embedding canvas `aria-label` now describes the current
+  frame.
+- **Limitations:** a section in the README and a paragraph on the page.
+- **LayerNorm:** its omission is now stated as deliberate (following Nanda,
+  for interpretability).
+- **Licence and run list:** MIT `LICENSE`. `validate.py` takes the run order
+  from `config.RUN_ORDER` (no hard-coded list).
+- **Checks:** one of my new checks was itself wrong. The "timing varies more
+  than 2×" check divided the slowest *other* seed by the fastest seed overall
+  (1.37×). It now uses all three (2.34×).
+- **Zsh pitfall** while doing this by hand: `$R` with several ids isn't
+  word-split in zsh. `run_all.sh` is bash, so it's unaffected.
+- `requirements.txt` was already pinned exactly (torch 2.15.0, numpy 2.5.4,
+  matplotlib 3.11.2), so no change was needed there.
+
