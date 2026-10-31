@@ -1,0 +1,38 @@
+{
+  "p": 97,
+  "operation": "(a + b) mod p",
+  "runs": [
+    {
+      "id": "baseline",
+      "label": "Standard training",
+      "description": "Weight decay 1.0, 30% of data",
+      "weight_decay": 1.0,
+      "train_frac": 0.3,
+      "file": "runs/baseline.json"
+    },
+    {
+      "id": "no_decay",
+      "label": "No weight decay",
+      "description": "Weight decay 0, 30% of data",
+      "weight_decay": 0.0,
+      "train_frac": 0.3,
+      "file": "runs/no_decay.json"
+    },
+    {
+      "id": "more_data",
+      "label": "More training data",
+      "description": "Weight decay 1.0, 60% of data",
+      "weight_decay": 1.0,
+      "train_frac": 0.6,
+      "file": "runs/more_data.json"
+    },
+    {
+      "id": "less_data",
+      "label": "Less training data",
+      "description": "Weight decay 1.0, 15% of data",
+      "weight_decay": 1.0,
+      "train_frac": 0.15,
+      "file": "runs/less_data.json"
+    }
+  ]
+}

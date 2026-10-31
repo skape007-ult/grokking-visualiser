@@ -97,3 +97,60 @@ Other observations:
 **Phase 0 took 1 attempt** (plus a deterministic re-run and a re-record; no
 hyperparameter changes).
 
+## 2026-10-30 — Phase 1: sweep and export
+
+### Bug — every embedding snapshot was the final embedding
+After projecting the baseline, every frame (step 1 included) was identical
+to the final one. `number_embeddings()` returned `W_E[:p].detach()`, which is
+a *view* of the live parameter; on CPU `.float().cpu().numpy()` are no-ops,
+so all 40 stored "snapshots" pointed at the same memory and the whole stack
+showed the final weights. The metrics were unaffected. Fix: `.clone()`. Also
+added a `validate.py` check that the first and final frames differ, so this
+can't silently come back. The Phase 0 baseline metrics are unchanged (training
+doesn't depend on recording); all four runs were re-run with the fix.
+Lesson: look at the data, not just at whether the pipeline ran.
+
+### The four sweep runs (all seed 0, 25 000 steps, deterministic CPU)
+All four were trained in parallel (4 processes on the M3, ~7–16 min each under
+contention vs ~4.5 min alone). The baseline reproduced its Phase 0 numbers
+exactly, so parallel execution doesn't affect results.
+
+| run | diff from baseline | train ≥99% | test ≥50% | test ≥95% | final train / test | max test |
+|---|---|---|---|---|---|---|
+| `baseline` | — | 130 | 8 939 | 10 065 | 100% / 100% | 100% |
+| `no_decay` | wd 1.0 → **0.0** | 125 | never | never | 100% / **3.0%** | 3.05% |
+| `more_data` | frac 0.3 → **0.6** | 130 | **125** | **378** | 100% / 100% | 100% |
+| `less_data` | frac 0.3 → **0.15** | 111 | never | never | 100% / **0.5%** | 1.04% |
+
+Every run behaved as the brief hypothesised, so no labels or values needed
+changing.
+
+- **no_decay**: memorises at the same speed as baseline, then *nothing happens*
+  for 25k steps. Test acc creeps from ~2.8% at step 1k to 3.0% and stops; train
+  loss falls to 5.6e-11 (no decay pulling the weights back), test loss rises to
+  56.7. This is the headline contrast: same data, same steps, the only
+  difference is weight decay, and generalisation never comes.
+- **more_data**: no meaningful delay. Test acc is already 62% at the step train
+  reaches 99% (130), and 95% at step 378. Generalisation and memorisation
+  essentially coincide, i.e. no grokking gap.
+- **less_data** (1 411 training pairs): memorises fastest (step 111, fewer
+  examples) and stays at chance (max 1.04%, final 0.5%; chance = 1.03%) for all
+  25k steps. It may still grok much later; we don't know, and the site must not
+  imply it never would, only that it hadn't by 25k steps.
+
+Embeddings (fixed-basis PCA, fitted on each run's final snapshot):
+- baseline: random blob until ~7.6k, then organises into concentric
+  ring/ellipse structure by 12k. 2 PCs explain 26.8% of final variance.
+- more_data: rings already visible by step ~254 and stable afterwards (23.8%).
+- no_decay / less_data: blobs throughout; the 2 PCs explain only 8.3% / 16.1%,
+  i.e. no dominant low-dimensional structure.
+- **Surprise**: colouring by numeric value does *not* give a smooth colour
+  wheel around the rings; neighbours on a ring aren't consecutive numbers.
+  That's consistent with Nanda et al.: the ring orders numbers by k·a mod p for
+  some key frequency k, not by a. (Investigating which k: out of scope → next
+  steps.)
+
+Export: 4 files of ~70 KB each (limit 200 KB), `validate.py` passes. Spot-
+checked `no_decay.json`: 200 steps from 1 to 25 000, full config present,
+test acc tail 0.0302, 40 frames of 97 × 2 coords.
+

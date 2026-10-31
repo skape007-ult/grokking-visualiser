@@ -69,6 +69,8 @@ def validate_run(entry, p):
     check(fsteps == sorted(set(fsteps)), f"{rid}: frame steps not strictly ascending")
     check(all(s in step_set for s in fsteps), f"{rid}: frame step not in steps")
     check(fsteps[0] == steps[0] and fsteps[-1] == steps[-1], f"{rid}: frames must include first and final step")
+    # Guards against snapshots aliasing the live weights (all frames equal).
+    check(frames[0]["coords"] != frames[-1]["coords"], f"{rid}: first and final frames are identical")
     for f in frames:
         c = f["coords"]
         check(len(c) == p, f"{rid}: frame {f['step']} has {len(c)} points, expected {p}")

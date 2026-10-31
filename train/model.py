@@ -71,5 +71,9 @@ class Transformer(nn.Module):
         return x[:, -1] @ self.W_U  # logits from the final '=' position
 
     def number_embeddings(self, p: int) -> torch.Tensor:
-        """Embedding rows for the p number tokens (p x d_model)."""
-        return self.W_E[:p].detach()
+        """A copy of the embedding rows for the p number tokens (p x d_model).
+
+        Cloned: a plain slice would be a view of the live parameter, so every
+        stored snapshot would silently track the current weights.
+        """
+        return self.W_E[:p].detach().clone()
