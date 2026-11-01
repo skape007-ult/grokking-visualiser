@@ -145,7 +145,7 @@ grokking-visualiser/
 - Nanda, Chan, Lieberum, Smith & Steinhardt (2023). *Progress measures for
   grokking via mechanistic interpretability.* [arXiv:2301.05217](https://arxiv.org/abs/2301.05217)
 
-Demo video: VIDEO_URL  <!-- TODO(owner): add the demo video link -->
+Demo video: https://youtu.be/46L25QsymwI
 
 ---
 
