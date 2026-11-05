@@ -90,13 +90,17 @@ def plot(rows, png):
     top = budget * 1.6  # band above the budget for "did not grok"
     fig, ax = plt.subplots(figsize=(7, 4.6))
     colors = {0: "#1f77b4", 1: "#ff7f0e", 2: "#2ca02c"}
+    def jx(r):  # small multiplicative x-jitter per seed so coincident points stay visible
+        return r["weight_decay"] * (1 + 0.05 * (r["seed"] - 1))
+
     for seed in sorted({r["seed"] for r in pos}):
         g = [r for r in pos if r["seed"] == seed and r["grokked"]]
         n = [r for r in pos if r["seed"] == seed and not r["grokked"]]
-        ax.scatter([r["weight_decay"] for r in g], [r["grok_step"] for r in g], color=colors[seed],
+        ax.scatter([jx(r) for r in g], [r["grok_step"] for r in g], color=colors[seed],
                    s=40, zorder=3, label=f"seed {seed}", alpha=0.85)
-        ax.scatter([r["weight_decay"] for r in n], [top] * len(n), color=colors[seed], marker="x",
+        ax.scatter([jx(r) for r in n], [top] * len(n), color=colors[seed], marker="x",
                    s=60, zorder=3, linewidths=2)
+    ax.scatter([], [], color="grey", marker="x", s=60, linewidths=2, label="did not grok (colour = seed)")
     wds = sorted({r["weight_decay"] for r in pos})
     med_x, med_y = [], []
     for wd in wds:
@@ -108,20 +112,19 @@ def plot(rows, png):
             label="median (all seeds grokked)")
     ax.axhline(budget, color="grey", lw=0.8, ls="--")
     ax.text(wds[0], budget * 1.05, f"step budget ({budget:,})", fontsize=8, color="grey", va="bottom")
-    ax.text(wds[0], top * 1.12, "× = did not grok within budget", fontsize=8, va="bottom")
     nd = [r for r in rows if r["weight_decay"] == 0]
-    ax.text(0.99, 0.02, f"wd = 0 (existing no_decay): {sum(not r['grokked'] for r in nd)}/{len(nd)} "
-            f"seeds did not grok within {budget:,} steps", transform=ax.transAxes, ha="right", fontsize=8)
+    ax.text(0.99, 0.97, f"wd = 0 (existing no_decay): {sum(not r['grokked'] for r in nd)}/{len(nd)} "
+            f"seeds did not grok within {budget:,} steps", transform=ax.transAxes, ha="right", va="top", fontsize=8)
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_ylim(top=top * 1.6)
     ax.set_xticks(wds)
     ax.set_xticklabels([f"{w:g}" for w in wds])
-    ax.set_xlabel("weight decay (log scale); wd = 1.0 points are the existing baseline")
-    ax.set_ylabel("grokking step (first recorded test acc ≥ 95%)")
+    ax.set_xlabel("weight decay (log scale; seeds slightly offset). wd = 1.0: existing baseline runs")
+    ax.set_ylabel("grokking step (first recorded test acc ≥ 95%)\n× at top = did not grok within budget")
     ax.set_title("(a + b) mod 97, 30% train data: grokking step vs weight decay", fontsize=10)
     ax.grid(alpha=0.3, which="both")
-    ax.legend(fontsize=8, loc="center right")
+    ax.legend(fontsize=8, loc="lower left")
     fig.tight_layout()
     fig.savefig(png, dpi=130)
 
