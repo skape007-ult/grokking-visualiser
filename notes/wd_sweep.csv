@@ -1,0 +1,13 @@
+source,weight_decay,seed,grok_step,grokked,step_budget,final_train_acc,final_test_acc,max_test_acc,seconds
+existing:no_decay,0.0,0,,False,25000,1.0,0.0302,0.0305,
+existing:no_decay,0.0,1,,False,25000,1.0,0.0405,0.0405,
+existing:no_decay,0.0,2,,False,25000,1.0,0.0433,0.0439,
+sweep,0.1,0,,False,25000,1.0,0.055,0.0551,3756.9
+sweep,0.1,1,,False,25000,1.0,0.0811,0.0811,3589.6
+sweep,0.3,0,,False,25000,1.0,0.128,0.128,3301.9
+sweep,0.3,1,19718,True,25000,1.0,0.9995,0.9995,1967.4
+sweep,0.5,0,20514,True,25000,1.0,1.0,1.0,3551.6
+sweep,0.5,1,11560,True,25000,1.0,1.0,1.0,2103.7
+existing:baseline,1.0,0,9868,True,25000,1.0,1.0,1.0,
+existing:baseline,1.0,1,5785,True,25000,1.0,1.0,1.0,
+existing:baseline,1.0,2,4216,True,25000,1.0,1.0,1.0,
