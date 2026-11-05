@@ -12,11 +12,26 @@ No code or config defaults were changed. The seed goes in `--tag` because `--tag
 
 ## Results
 
-TABLE
+| weight decay | seed | source | grokking step (test acc ≥ 95%) | final train acc | final test acc |
+|---|---|---|---|---|---|
+| 0 | 0 | existing `no_decay` | did not grok within 25,000 steps | 100.00% | 3.02% |
+| 0 | 1 | existing `no_decay` | did not grok within 25,000 steps | 100.00% | 4.05% |
+| 0 | 2 | existing `no_decay` | did not grok within 25,000 steps | 100.00% | 4.33% |
+| 0.1 | 0 | sweep (this PR) | did not grok within 25,000 steps | 100.00% | 5.50% |
+| 0.1 | 1 | sweep (this PR) | did not grok within 25,000 steps | 100.00% | 8.11% |
+| 0.3 | 0 | sweep (this PR) | did not grok within 25,000 steps | 100.00% | 12.80% |
+| 0.3 | 1 | sweep (this PR) | 19,718 | 100.00% | 99.95% |
+| 0.5 | 0 | sweep (this PR) | 20,514 | 100.00% | 100.00% |
+| 0.5 | 1 | sweep (this PR) | 11,560 | 100.00% | 100.00% |
+| 1 | 0 | existing `baseline` | 9,868 | 100.00% | 100.00% |
+| 1 | 1 | existing `baseline` | 5,785 | 100.00% | 100.00% |
+| 1 | 2 | existing `baseline` | 4,216 | 100.00% | 100.00% |
+
+Not in the table: the killed wd = 0.03 runs (seed 0 at step 9,675, seed 1 at step 12,266) had test accuracy of 3.4% and 4.3% when they stopped. They were incomplete, so they carry no grokking step and no final accuracy.
 
 ![grokking step vs weight decay](wd_sweep.png)
 
-READING
+**Reading.** Within the 25,000-step budget, grokking switches on between wd = 0.1 and wd = 0.5. At wd = 0.1, neither seed groks. At wd = 0.3, one of two does (step 19,718). At wd = 0.5, both do (20,514 and 11,560; median 16,037). At the existing wd = 1.0, all three do (median 5,785). Where it happens, grokking comes later as weight decay shrinks, and at wd = 0.3–0.5 it lands close to the budget, so the "did not grok" verdicts near the switch-on point are partly an artefact of the 25,000-step cut-off. The non-grokking runs are not static: final test accuracy rises with weight decay (3–4% at wd = 0, 5.5% and 8.1% at 0.1, 12.8% at 0.3) and was still climbing at step 25,000. With two seeds per setting, this locates the switch-on point only roughly and says nothing reliable about how the delay scales with weight decay.
 
 ## Limitations
 
