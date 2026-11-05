@@ -139,6 +139,23 @@ def main():
         print(f"  plane PC{j0 + 1}-PC{j0 + 2} vs (cos,sin) of k={best[0]}: "
               f"principal-angle cosines {best[1].round(3).tolist()}")
 
+    # The top PCs have near-equal variance, so individual PCs (and the PC1-PC2
+    # plane) are an arbitrary rotation within a degenerate subspace. Basis-free
+    # check: overlap of the top-2m PC subspace with span{cos,sin of key freqs}.
+    for m in (2, 4):
+        kk = key[0][:m]
+        Q = np.concatenate([np.stack([C[ks == k][0], S[ks == k][0]], 1) for k in kk], 1)
+        P = U[:, :2 * m]
+        sv = np.linalg.svd(P.T @ Q, compute_uv=False)
+        print(f"  top-{2 * m} PC subspace vs span(cos,sin) of k={sorted(kk.tolist())}: "
+              f"min principal-angle cosine {sv.min():.3f}, mean cos^2 {np.mean(sv**2):.3f}")
+    # Which frequencies does the site's PC1/PC2 view mix?
+    for j in (0, 1):
+        pc = U[:, j]
+        r2 = (C @ pc) ** 2 + (S @ pc) ** 2
+        o = np.argsort(r2)[::-1][:3]
+        print(f"  PC{j + 1} energy by frequency: " + ", ".join(f"k={ks[i]}: {r2[i]:.2f}" for i in o))
+
     # ---- 3. over training (seed 0) --------------------------------------------
     steps = np.array(run["embedding_steps"])
     fixed = key[0]
