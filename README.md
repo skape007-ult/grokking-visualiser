@@ -68,8 +68,7 @@ or step by step:
 cd site && python3 -m http.server 8000             # open http://localhost:8000
 ```
 
-Runs are deterministic (seeded, `torch.use_deterministic_algorithms`, CPU),
-so this regenerates `site/data/` byte-for-byte on the same software stack.
+Training is bit-identical on the same machine and software stack (Apple M3 CPU, torch 2.15.0); across hardware, the grokking steps were within ~6% with the same seed order in a 3-seed check ([notes/repro.md](notes/repro.md)).
 Opening `site/index.html` straight from disk won't work (browsers block `fetch`
 on `file://`), so serve it over HTTP as above.
 
