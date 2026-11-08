@@ -1,0 +1,4 @@
+source,weight_decay,seed,grok_step,grokked,near_budget,step_budget,final_train_acc,final_test_acc,max_test_acc,seconds,last_recorded_step,max_test_acc_step,min_test_acc_after_grok,step_recorded_at_25k,test_acc_at_25k,step_recorded_at_50k,test_acc_at_50k,step_recorded_at_75k,test_acc_at_75k,steps_shared_with_25k_run,last_shared_step,max_abs_test_acc_diff_vs_25k_run
+long100k,0.03,0,,False,False,100000,1.0,0.0598,0.0598,3703.0,100000,100000,,24139,0.0395,49131,0.0481,71774,0.0544,42,244,0.0
+long100k,0.1,0,,False,False,100000,1.0,0.3772,0.3772,3702.8,100000,100000,,24139,0.0538,49131,0.0727,73209,0.1142,42,244,0.0
+long100k,0.3,0,34305,True,False,100000,1.0,1.0,1.0,3701.8,100000,42622,0.9541,24622,0.1696,49131,1.0,71774,1.0,42,244,0.0
