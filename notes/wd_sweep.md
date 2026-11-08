@@ -70,6 +70,45 @@ Within 25,000 steps, no seed groks at wd ≤ 0.1, two of three grok at wd = 0.3,
 - **The wd = 0 rows were not retrained.** They come from committed data rounded to 4 dp. The reproduction check above covers wd = 1.0 only.
 - **Recorded steps only.** The grokking step is quantised to the recording schedule, about 2–5% of the step value.
 
+## Longer budget
+
+Added on branch `exp/wd-long`. Raw table: [`wd_sweep_100k.csv`](wd_sweep_100k.csv). The plot above now also shows these runs as hollow diamonds.
+
+Nothing grokked at wd = 0.03 or 0.1 within 25,000 steps, so this section asks whether that reflects a threshold or only the step budget. It reran seed 0 at wd ∈ {0.03, 0.1, 0.3} for 100,000 steps, with the baseline config otherwise unchanged:
+
+`.venv/bin/python train/train.py --run baseline --seed 0 --set weight_decay=W --set steps=100000 --tag wdW__seed0__100k`
+
+All three ran in parallel on the same M3 CPU (about 3,700 s each), and all three reached step 100,000. wd = 0.3 seed 0 is the one run at that weight decay that did not grok within 25,000 steps in the table above.
+
+| weight decay | seed | grokking step (test acc ≥ 95%) | max test acc | at step | final train acc | final test acc |
+|---|---|---|---|---|---|---|
+| 0.03 | 0 | did not grok within 100,000 steps | 5.98% | 100,000 | 100.00% | 5.98% |
+| 0.1 | 0 | did not grok within 100,000 steps | 37.72% | 100,000 | 100.00% | 37.72% |
+| 0.3 | 0 | 34,305 | 100.00% | 42,622 | 100.00% | 100.00% |
+
+**Test accuracy along the way** (last recorded step at or before each checkpoint):
+
+| weight decay | ≤ 25,000 | ≤ 50,000 | ≤ 75,000 | 100,000 |
+|---|---|---|---|---|
+| 0.03 | 3.95% (step 24,139) | 4.81% (step 49,131) | 5.44% (step 71,774) | 5.98% |
+| 0.1 | 5.38% (step 24,139) | 7.27% (step 49,131) | 11.42% (step 73,209) | 37.72% |
+| 0.3 | 16.96% (step 24,622) | 100.00% (step 49,131) | 100.00% (step 71,774) | 100.00% |
+
+**Reading (one seed per setting).**
+
+- **wd = 0.3:** for seed 0 the 25,000-step result was a budget effect. That run crossed 95% at step 34,305 and its recorded test accuracy stayed at or above 95.41% through step 100,000.
+- **wd = 0.1:** seed 0 did not grok within 100,000 steps, but its test accuracy was at its maximum at the last recorded step (37.72%, up from 11.42% at step 73,209). This run can neither show a threshold nor show that it would grok with more steps.
+- **wd = 0.03:** seed 0 did not grok within 100,000 steps. Its test accuracy reached 5.98%, rising from 3.95% at step 24,139, so this budget does not separate a threshold from a very long delay.
+
+These three runs do not establish a threshold in weight decay. They show that for seed 0 the 25,000-step cut-off hid grokking at wd = 0.3, and that it may also have limited what could be said at lower wd. wd = 0 was not rerun at this budget.
+
+**Caveats.**
+
+- **Single seed.** All three runs are seed 0, which was the slowest of the three seeds at wd = 0.3, 0.5 and 1.0 in the table above. Other seeds were not run at 100,000 steps, so nothing here gives a rate of grokking at any setting.
+- **Recording schedule.** The steps are log-spaced over the budget, so they differ from the 25k runs. For wd = 0.3 the previous recorded step was 33,632 (93.61% test accuracy), so the crossing is between 33,633 and 34,305.
+- **Agreement with the 25k runs.** Each 100k run matches the 25k run with the same wd and seed exactly at the 42 recorded steps they share, but the two schedules share no step after 244. Beyond that the runs are not directly compared. The recorded values are close (for wd = 0.3, 16.96% at step 24,622 here and 17.93% at step 25,000 in the 25k run).
+- **Same limits as above:** one task, one configuration, and one machine and software stack.
+
 ## Appendix: Earlier cloud run
 
 The previous version of this note (branch `exp/wd-sweep`, 2026-11-05) ran 6 of these settings on a 4-core Linux CPU with 1–2 threads per run. wd = 0.03 was not completed there. These numbers are kept for reference only and are not comparable to the M3 rows; the M3 columns are repeated here to show the size of the difference.
