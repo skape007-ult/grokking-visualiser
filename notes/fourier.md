@@ -66,7 +66,7 @@ Source: `fourier_m3_summary.csv`, `fourier_m3_spectrum.csv`.
 |---|---|---|---|---|
 | 0 | 12 (.265), 3 (.260), 32 (.250), 10 (.188), 20 (.027) | 0.964 | 0.991 | 4 / 48 |
 | 1 | 33 (.298), 14 (.263), 27 (.245), 34 (.151), 29 (.028) | 0.957 | 0.985 | 4 / 48 |
-| 2 | 34 (.290), 41 (.221), 1 (.220), 9 (.197), 18 (.067) | 0.927 | 0.995 | 4 / 48 |
+| 2 | 34 (.290), 41 (.221), 1 (.220), 9 (.197), 18 (.067) | 0.927 | 0.994 | 4 / 48 |
 
 If energy were spread evenly, 5 of the 48 frequencies would carry 0.104. In
 every seed the final number embeddings are close to fully Fourier-sparse:
@@ -128,12 +128,12 @@ steps because accuracy is only recorded at discrete steps.
 |---|---|---|---|---|
 | 0 | 0.109 | 0.129 | 0.220 (step 4,563, test 8.2%) | 0.991 |
 | 1 | 0.108 | 0.140 | 0.243 (step 2,239, test 8.6%) | 0.985 |
-| 2 | 0.103 | 0.159 | 0.248 (step 1,393, test 9.5%) | 0.995 |
+| 2 | 0.103 | 0.159 | 0.248 (step 1,393, test 9.5%) | 0.994 |
 
 **Timing.** In every seed, energy in the final key frequencies starts near the
 even-spread value of 0.104 and is already about 0.22–0.25 just before test
 accuracy reaches 10%. It is 0.43–0.47 at the 50% crossing and only 0.57–0.63 at
-the grokking step, then keeps rising to 0.985–0.995 by step 25,000.
+the grokking step, then keeps rising to 0.985–0.994 by step 25,000.
 
 Measured per unit of log-step, the largest rise between snapshots falls late in
 the test-accuracy jump: from 79% to 88% test accuracy in seed 0, 89% to 96% in
@@ -195,7 +195,7 @@ hardware. Numbers for the cloud run other than those above were not compared.
 **Confirmed (embedding level, this repo, p = 97, M3 runs, 3 seeds):**
 
 - Final number-token embeddings are Fourier-sparse. 4 of 48 frequencies carry
-  92.7–96.4% of the centred energy, and 5 carry 98.5–99.5%.
+  92.7–96.4% of the centred energy, and 5 carry 98.5–99.4%.
 - The top PCs line up with cos/sin of those key frequencies. The top 8 PCs and
   the 4 key cos/sin pairs span almost the same space, with smallest
   principal-angle cosine 0.998, 0.984 and 0.998 for seeds 0, 1 and 2.
@@ -206,7 +206,7 @@ hardware. Numbers for the cloud run other than those above were not compared.
 - Energy in the final key frequencies is already above the even-spread value
   before test accuracy reaches 10% (0.22–0.25), is 0.43–0.47 at the 50%
   crossing and 0.57–0.63 at the grokking step, and continues rising to
-  0.985–0.995 by step 25,000 (all 3 seeds).
+  0.985–0.994 by step 25,000 (all 3 seeds).
 - Key frequencies differ across seeds.
 - The cloud-CPU and M3 runs grok in the same seed order, within about 6%.
 
