@@ -4,10 +4,13 @@ Usage (from the repo root):
     python train/train.py --run baseline              # base seed
     python train/train.py --run baseline --seed 1     # -> outputs/baseline__seed1
     python train/train.py --run baseline --set train_frac=0.25 --tag attempt2
+    python train/train.py --run baseline --checkpoints   # also save weights
 
 Writes outputs/<name>/run.json (config + metrics) and embeddings.npy
 (raw number-token embedding snapshots, n_snapshots x p x d_model), where
-<name> is --tag if given, else cfg.output_name.
+<name> is --tag if given, else cfg.output_name. With --checkpoints it also
+writes checkpoints.pt: {step: state_dict} at every recorded step (copies of
+the weights only; saving reads the model and never changes training).
 """
 
 from __future__ import annotations
@@ -94,7 +97,7 @@ def evaluate(model, x, y, dtype):
     return loss, acc
 
 
-def train(cfg: RunConfig, out_name: str | None = None) -> Path:
+def train(cfg: RunConfig, out_name: str | None = None, checkpoints: bool = False) -> Path:
     set_seed(cfg.seed)
     device = pick_device(cfg.device)
     loss_dtype = getattr(torch, cfg.loss_dtype)
@@ -115,6 +118,7 @@ def train(cfg: RunConfig, out_name: str | None = None) -> Path:
     record_set = set(record)
     metrics = {k: [] for k in ("steps", "train_loss", "test_loss", "train_acc", "test_acc")}
     emb_steps, emb = [], []
+    ckpts = {}               # step -> copy of state_dict (only with checkpoints=True)
     next_dense = None        # next extra recording step while test acc is moving
     last_snap_acc = None     # test acc at the most recent snapshot
 
@@ -133,6 +137,8 @@ def train(cfg: RunConfig, out_name: str | None = None) -> Path:
             prev_acc = metrics["test_acc"][-1] if metrics["test_acc"] else None
             for k, v in zip(metrics, (step, tr_l, te_l, tr_a, te_a)):
                 metrics[k].append(v)
+            if checkpoints:
+                ckpts[step] = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
 
             # Densify recording where test accuracy moves fast (rate is per
             # e-fold of steps, so it's comparable across the log schedule).
@@ -160,6 +166,8 @@ def train(cfg: RunConfig, out_name: str | None = None) -> Path:
     out = OUTPUTS / (out_name or cfg.output_name)
     out.mkdir(parents=True, exist_ok=True)
     np.save(out / "embeddings.npy", np.stack(emb))
+    if checkpoints:
+        torch.save(ckpts, out / "checkpoints.pt")
     (out / "run.json").write_text(
         json.dumps(
             {
@@ -187,13 +195,15 @@ def main():
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                     help="override a config field (for exploratory attempts)")
     ap.add_argument("--tag", help="output directory name (defaults to the run id)")
+    ap.add_argument("--checkpoints", action="store_true",
+                    help="also save the weights at every recorded step (checkpoints.pt)")
     args = ap.parse_args()
     cfg = RUNS[args.run].config
     if args.seed is not None:
         cfg = cfg.with_overrides(seed=args.seed)
     for a in args.set:
         cfg = parse_override(cfg, a)
-    train(cfg, args.tag)
+    train(cfg, args.tag, checkpoints=args.checkpoints)
 
 
 if __name__ == "__main__":
