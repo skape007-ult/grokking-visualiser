@@ -37,7 +37,12 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
     # The embedding lookup's backward pass (index_put with accumulate) is
     # otherwise nondeterministic on multithreaded CPU (~1e-8 differences that
-    # compound over thousands of steps). This makes runs bit-for-bit repeatable.
+    # compound over thousands of steps). This makes runs bit-for-bit repeatable
+    # only on the same machine and software stack *at a fixed thread count*:
+    # changing the thread count changes floating-point summation order, so runs
+    # differ from the first step (a 1-thread vs 4-thread rerun of baseline seed
+    # 1 moved its grokking step from 5,901 to 6,138). The thread count used is
+    # recorded in run.json (runtime.num_threads).
     torch.use_deterministic_algorithms(True)
 
 
@@ -168,6 +173,7 @@ def train(cfg: RunConfig, out_name: str | None = None) -> Path:
                     "device": str(device),
                     "loss_dtype_used": str(loss_dtype).removeprefix("torch."),
                     "torch": torch.__version__,
+                    "num_threads": torch.get_num_threads(),
                     "seconds": round(time.time() - t0, 1),
                 },
                 **metrics,
