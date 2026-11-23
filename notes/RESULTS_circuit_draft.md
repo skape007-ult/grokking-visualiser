@@ -130,7 +130,7 @@ The φ lead is small in seeds 0 and 4 (0.06 and 0.08 ln-steps).
   pre-registered rule, that check does not discriminate in seed 4.
 - **Seed 4 grokked near the budget** (95% at step 23,098 of 25,000). Its key
   frequencies hold only 0.84 of its embedding energy at the end, against
-  0.98–0.99 in the other seeds, and are still rising. Its key set and its
+  0.975–0.994 in the other seeds, and are still rising. Its key set and its
   completion checks come from an unconverged model.
 
 ## What this does and does not show
@@ -143,8 +143,9 @@ It does **not** show the internal mechanism, that is, the neurons computing
 cos/sin products. It does not distinguish the clock algorithm from the
 "pizza" algorithm, both of which produce key-frequency logits. It also does
 not use Nanda's neuron-level restricted loss: the analysis projects the
-logits directly. In every seed the non-MLP paths make up a small share
-(1.3–4.9%) of the key-frequency logit component.
+logits directly. The size of the non-MLP part of the key-frequency logit
+component is in `circuit/circuit_predictions.csv`, but it was not audited, so
+it is not quoted here.
 
 ## Reproducibility
 
