@@ -5,6 +5,7 @@ suddenly *generalise* thousands of steps later, and see that without weight
 decay it never does.
 
 **Live:** [skape007-ult.github.io/grokking-visualiser/](https://skape007-ult.github.io/grokking-visualiser/)
+· **Demo video:** [youtu.be/46L25QsymwI](https://youtu.be/46L25QsymwI)
 
 ![Dragging the step slider through training: test accuracy jumps late and the number embeddings organise into rings](notes/screenshots/scrub.gif)
 
@@ -12,17 +13,17 @@ decay it never does.
 
 A 1-layer transformer trained on 30% of all `(a + b) mod 97` sums hits 99%
 training accuracy by step ~130, but only crosses 95% on unseen sums thousands
-of steps later: at step 4,216, 5,785 and 9,868 in three seeds. With weight
+of steps later: at step 9,868 (seed 0), 5,785 (seed 1) and 4,216 (seed 2). With weight
 decay switched off and everything else identical, none of the three seeds
 generalises. They memorise just as fast and are still at 3–4% on unseen sums
 after 25,000 steps.
 
-| setting (3 seeds each) | test acc ≥ 95% at step | final test acc |
+| setting (3 seeds each) | test acc ≥ 95% at step (seeds 0 / 1 / 2) | final test acc (seeds 0 / 1 / 2) |
 |---|---|---|
-| Standard (weight decay 1.0, 30% of data) | 4,216 / 5,785 / 9,868 | 100% / 100% / 100% |
+| Standard (weight decay 1.0, 30% of data) | 9,868 / 5,785 / 4,216 | 100% / 100% / 100% |
 | No weight decay | never | 3.0% / 4.1% / 4.3% |
-| More data (60%) | 269 / 370 / 489 | 100% in all three |
-| Less data (15%) | never | 0.4–1.1% (chance ≈ 1%) |
+| More data (60%) | 370 / 269 / 489 | 100% in all three |
+| Less data (15%) | never | 0.5% / 0.4% / 1.1% (chance ≈ 1%) |
 
 ## Limitations
 
@@ -38,6 +39,25 @@ after 25,000 steps.
   everything the network learned.
 - **Timing is sensitive to tiny numerical differences:** a ~1e-8 change once
   shifted the grokking step by 5%. Treat single step numbers as approximate.
+
+## Follow-ups
+
+<!-- Owner: wording to edit. Each line restates a merged PR's own result; no new claims. -->
+
+- **Weight-decay sweep** ([#5](https://github.com/skape007-ult/grokking-visualiser/pull/5)): within 25,000 steps, no seed grokked at
+  weight decay 0.03 or 0.1, 2 of 3 did at 0.3, and all 3 did at 0.5 and 1.0.
+- **Longer weight-decay budget** ([#8](https://github.com/skape007-ult/grokking-visualiser/pull/8)): with 100,000 steps, seed 0 at
+  weight decay 0.3 grokked at step 34,305, while 0.03 and 0.1 did not (max test
+  accuracy 5.98% and 37.72%).
+- **Less data, 100k steps** ([#7](https://github.com/skape007-ult/grokking-visualiser/pull/7)): none of the 3 `less_data` seeds
+  grokked within 100,000 steps, and test accuracy stayed near chance (final
+  0.46–0.90%).
+- **Fourier analysis** ([#6](https://github.com/skape007-ult/grokking-visualiser/pull/6)): at step 25,000, 4 of 48 frequencies carry
+  92.7–96.4% of the number embeddings' centred energy in all 3 seeds; this is
+  embedding-level evidence only.
+- **Reproducibility** ([#3](https://github.com/skape007-ult/grokking-visualiser/pull/3)): rerunning seed 0 on the M3 gave bit-identical
+  results, and a Linux cloud CPU grokked within 5.8% of the M3 steps, in the
+  same seed order.
 
 ## How to reproduce
 
@@ -128,14 +148,18 @@ grokking-visualiser/
 
 ## What I'd do next
 
+<!-- DRAFT (owner to reword): the earlier list included the less_data 100k
+run, the weight-decay sweep and the ring explanation, which are now covered
+by the follow-ups above. -->
+
 - Measure the timing distribution properly: 10–20 seeds per setting (three
   seeds already span 4,216–9,868 steps).
-- Find out whether `less_data` groks with a longer budget (100k+ steps), or
-  never does.
-- Sweep weight decay between 0 and 1 to find where grokking turns on, and
-  how the delay scales.
-- Explain the rings: they are not ordered by number value, which is
-  consistent with Nanda et al.'s Fourier-feature account but not verified here.
+- Test whether the model *uses* its key Fourier frequencies (ablations and
+  Nanda et al.'s restricted/excluded loss), not just whether the embeddings
+  contain them.
+- Locate the weight-decay threshold with more seeds and longer budgets:
+  wd 0.1 seed 0 was still rising at 100,000 steps.
+- Other operations (subtraction, division mod p), other primes, deeper models.
 
 ## References
 
@@ -143,8 +167,6 @@ grokking-visualiser/
   Beyond Overfitting on Small Algorithmic Datasets.* [arXiv:2201.02177](https://arxiv.org/abs/2201.02177)
 - Nanda, Chan, Lieberum, Smith & Steinhardt (2023). *Progress measures for
   grokking via mechanistic interpretability.* [arXiv:2301.05217](https://arxiv.org/abs/2301.05217)
-
-Demo video: https://youtu.be/46L25QsymwI
 
 ---
 
