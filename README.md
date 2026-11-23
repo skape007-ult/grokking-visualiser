@@ -32,6 +32,9 @@ after 25,000 steps.
 - **Three seeds per setting.** Enough to show none of the results is a
   one-run fluke, but too few to characterise the timing distribution. The
   grokking step already varies 2.3× across them.
+<!-- DRAFT (owner to reword): less_data has since been run to 100,000 steps
+without grokking (#7), so this bullet is stale for less_data. no_decay was
+not rerun. -->
 - **"Never" means "not within 25,000 steps".** The no-decay and less-data runs
   might generalise much later.
 - **The 2-D embedding view is lossy:** the top two PCA directions capture only
