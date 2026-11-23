@@ -1,0 +1,126 @@
+seed,check,pass,detail
+0,C4,True,grid rows + permutation reproduce make_dataset train/test tensors exactly
+0,C1b,True,rel diff train=0.00e+00 test=0.00e+00
+0,C1c,True,max |grid - batch| train logits = 0.00e+00
+0,C1,True,excluded with S = empty equals L
+0,C3,True,max|F^T F - I| = 1.84e-14
+0,C2,True,"restricted err=4.19e-14, excluded err=1.10e-13"
+0,P0,True,all-48 test-fit restricted test acc = 1.0000
+0,P1,True,"key excl train acc=0.0244 (<=0.10), CE*=4.5626 (>= 4.117), raw CE=5.624; random excl acc>=99% in 100/100; key CE* > all random CE*: True (random max 0.0000)"
+0,P2,True,"key test-fit restr test acc=1.0000 (>=0.99), CE*=0.0000; random restr acc<=5% in 99/100 (max 0.0660); key CE* < all random: True (random min 4.5738); leaking full-grid restr test acc=1.0000"
+0,P1-secondary-logitkey,True,"logit-key excl train acc=0.0195 (<=0.10), CE*=4.5607 (>= 4.117), raw CE=5.569; random excl acc>=99% in 100/100; key CE* > all random CE*: True (random max 0.0000)"
+0,P2-secondary-logitkey,True,"logit-key test-fit restr test acc=1.0000 (>=0.99), CE*=0.0000; random restr acc<=5% in 99/100 (max 0.0660); key CE* < all random: True (random min 4.5738); leaking full-grid restr test acc=1.0000"
+0,secondary-nonMLP-share-in-S,True,||P_S(L - L_mlp)|| / ||P_S L|| = 0.0486
+0,P3,True,key restr acc>=50% at 7050; key-minus-max-random>=0.30 at 5785; t50=8939
+0,P4,True,phi_key>=0.5 at 8424; t50=8939
+0,P4-report,True,excluded train acc <50% first at 8259; t50=8939; t95=10065
+0,P5:m1_restricted_cecal:onset,True,onset=1766 phase=before (want before); t10=5561 t99=10680
+0,P5:m1_restricted_cecal:steepest,True,steepest=8455 phase=during (want during); t10=5561 t99=10680
+0,P5:m1_restricted_cecal:completion,False,completion=8424 phase=during (want after); t10=5561 t99=10680
+0,P5:m2_excluded_cecal:onset,False,onset=7335 phase=during (want before); t10=5561 t99=10680
+0,P5:m2_excluded_cecal:steepest,True,steepest=8889 phase=during (want during); t10=5561 t99=10680
+0,P5:m2_excluded_cecal:completion,True,completion=17512 phase=after (want after); t10=5561 t99=10680
+0,P5:m3_emb_key_energy:onset,True,onset=4747 phase=before (want before); t10=5561 t99=10680
+0,P5:m3_emb_key_energy:steepest,True,steepest=9824 phase=during (want during); t10=5561 t99=10680
+0,P5:m3_emb_key_energy:completion,True,completion=18953 phase=after (want after); t10=5561 t99=10680
+0,P6,True,"r0: restr<=5% 1.000, excl within 1pp 1.000; r1: restr<=5% 1.000, excl within 1pp 1.000; r2: restr<=5% 1.000, excl within 1pp 1.000; r3: restr<=5% 0.993, excl within 1pp 1.000; r4: restr<=5% 1.000, excl within 1pp 1.000"
+1,C4,True,grid rows + permutation reproduce make_dataset train/test tensors exactly
+1,C1b,True,rel diff train=0.00e+00 test=0.00e+00
+1,C1c,True,max |grid - batch| train logits = 0.00e+00
+1,C1,True,excluded with S = empty equals L
+1,C3,True,max|F^T F - I| = 1.84e-14
+1,C2,True,"restricted err=4.19e-14, excluded err=1.10e-13"
+1,P0,True,all-48 test-fit restricted test acc = 1.0000
+1,P1,True,"key excl train acc=0.0248 (<=0.10), CE*=4.5660 (>= 4.117), raw CE=8.375; random excl acc>=99% in 100/100; key CE* > all random CE*: True (random max 0.0000)"
+1,P2,True,"key test-fit restr test acc=1.0000 (>=0.99), CE*=0.0000; random restr acc<=5% in 100/100 (max 0.0206); key CE* < all random: True (random min 4.5743); leaking full-grid restr test acc=1.0000"
+1,P1-secondary-logitkey,True,"logit-key excl train acc=0.0156 (<=0.10), CE*=4.5678 (>= 4.117), raw CE=8.425; random excl acc>=99% in 100/100; key CE* > all random CE*: True (random max 0.0000)"
+1,P2-secondary-logitkey,True,"logit-key test-fit restr test acc=1.0000 (>=0.99), CE*=0.0000; random restr acc<=5% in 100/100 (max 0.0206); key CE* < all random: True (random min 4.5743); leaking full-grid restr test acc=1.0000"
+1,secondary-nonMLP-share-in-S,True,||P_S(L - L_mlp)|| / ||P_S L|| = 0.0455
+1,P3,True,key restr acc>=50% at 2521; key-minus-max-random>=0.30 at 1631; t50=4938
+1,P4,True,phi_key>=0.5 at 3671; t50=4938
+1,P4-report,True,excluded train acc <50% first at 3599; t50=4938; t95=5901
+1,P5:m1_restricted_cecal:onset,True,onset=539 phase=before (want before); t10=2622 t99=6514
+1,P5:m1_restricted_cecal:steepest,True,steepest=3270 phase=during (want during); t10=2622 t99=6514
+1,P5:m1_restricted_cecal:completion,False,completion=3599 phase=during (want after); t10=2622 t99=6514
+1,P5:m2_excluded_cecal:onset,False,onset=2838 phase=during (want before); t10=2622 t99=6514
+1,P5:m2_excluded_cecal:steepest,True,steepest=3994 phase=during (want during); t10=2622 t99=6514
+1,P5:m2_excluded_cecal:completion,False,completion=5452 phase=during (want after); t10=2622 t99=6514
+1,P5:m3_emb_key_energy:onset,True,onset=1911 phase=before (want before); t10=2622 t99=6514
+1,P5:m3_emb_key_energy:steepest,True,steepest=5668 phase=during (want during); t10=2622 t99=6514
+1,P5:m3_emb_key_energy:completion,True,completion=8939 phase=after (want after); t10=2622 t99=6514
+1,P6,True,"r0: restr<=5% 0.987, excl within 1pp 1.000; r1: restr<=5% 1.000, excl within 1pp 1.000; r2: restr<=5% 1.000, excl within 1pp 1.000; r3: restr<=5% 1.000, excl within 1pp 1.000; r4: restr<=5% 1.000, excl within 1pp 1.000"
+2,C4,True,grid rows + permutation reproduce make_dataset train/test tensors exactly
+2,C1b,True,rel diff train=0.00e+00 test=0.00e+00
+2,C1c,True,max |grid - batch| train logits = 0.00e+00
+2,C1,True,excluded with S = empty equals L
+2,C3,True,max|F^T F - I| = 1.84e-14
+2,C2,True,"restricted err=4.19e-14, excluded err=1.10e-13"
+2,P0,True,all-48 test-fit restricted test acc = 1.0000
+2,P1,True,"key excl train acc=0.0567 (<=0.10), CE*=4.5560 (>= 4.117), raw CE=5.495; random excl acc>=99% in 100/100; key CE* > all random CE*: True (random max 0.0000)"
+2,P2,True,"key test-fit restr test acc=1.0000 (>=0.99), CE*=0.0000; random restr acc<=5% in 96/100 (max 0.0741); key CE* < all random: True (random min 4.5731); leaking full-grid restr test acc=1.0000"
+2,P1-secondary-logitkey,True,"logit-key excl train acc=0.0478 (<=0.10), CE*=4.5551 (>= 4.117), raw CE=5.453; random excl acc>=99% in 100/100; key CE* > all random CE*: True (random max 0.0000)"
+2,P2-secondary-logitkey,True,"logit-key test-fit restr test acc=1.0000 (>=0.99), CE*=0.0000; random restr acc<=5% in 96/100 (max 0.0741); key CE* < all random: True (random min 4.5731); leaking full-grid restr test acc=1.0000"
+2,secondary-nonMLP-share-in-S,True,||P_S(L - L_mlp)|| / ||P_S L|| = 0.0477
+2,P3,True,key restr acc>=50% at 1697; key-minus-max-random>=0.30 at 938; t50=3528
+2,P4,True,phi_key>=0.5 at 2521; t50=3528
+2,P4-report,True,excluded train acc <50% first at 2239; t50=3528; t95=4052
+2,P5:m1_restricted_cecal:onset,True,onset=335 phase=before (want before); t10=1507 t99=4216
+2,P5:m1_restricted_cecal:steepest,True,steepest=2060 phase=during (want during); t10=1507 t99=4216
+2,P5:m1_restricted_cecal:completion,False,completion=2423 phase=during (want after); t10=1507 t99=4216
+2,P5:m2_excluded_cecal:onset,True,onset=1339 phase=before (want before); t10=1507 t99=4216
+2,P5:m2_excluded_cecal:steepest,True,steepest=3396 phase=during (want during); t10=1507 t99=4216
+2,P5:m2_excluded_cecal:completion,False,completion=3744 phase=during (want after); t10=1507 t99=4216
+2,P5:m3_emb_key_energy:onset,True,onset=1287 phase=before (want before); t10=1507 t99=4216
+2,P5:m3_emb_key_energy:steepest,False,steepest=4584 phase=after (want during); t10=1507 t99=4216
+2,P5:m3_emb_key_energy:completion,True,completion=6018 phase=after (want after); t10=1507 t99=4216
+2,P6,True,"r0: restr<=5% 1.000, excl within 1pp 1.000; r1: restr<=5% 1.000, excl within 1pp 1.000; r2: restr<=5% 1.000, excl within 1pp 1.000; r3: restr<=5% 0.966, excl within 1pp 1.000; r4: restr<=5% 1.000, excl within 1pp 1.000"
+3,C4,True,grid rows + permutation reproduce make_dataset train/test tensors exactly
+3,C1b,True,rel diff train=0.00e+00 test=0.00e+00
+3,C1c,True,max |grid - batch| train logits = 0.00e+00
+3,C1,True,excluded with S = empty equals L
+3,C3,True,max|F^T F - I| = 1.84e-14
+3,C2,True,"restricted err=4.19e-14, excluded err=1.10e-13"
+3,P0,True,all-48 test-fit restricted test acc = 1.0000
+3,P1,True,"key excl train acc=0.0492 (<=0.10), CE*=4.5381 (>= 4.117), raw CE=8.29; random excl acc>=99% in 100/100; key CE* > all random CE*: True (random max 0.0000)"
+3,P2,False,"key test-fit restr test acc=1.0000 (>=0.99), CE*=0.0000; random restr acc<=5% in 88/100 (max 0.0844); key CE* < all random: True (random min 4.5293); leaking full-grid restr test acc=1.0000"
+3,P1-secondary-logitkey,True,"logit-key excl train acc=0.0244 (<=0.10), CE*=4.5685 (>= 4.117), raw CE=8.585; random excl acc>=99% in 100/100; key CE* > all random CE*: True (random max 0.0000)"
+3,P2-secondary-logitkey,False,"logit-key test-fit restr test acc=1.0000 (>=0.99), CE*=0.0000; random restr acc<=5% in 88/100 (max 0.0844); key CE* < all random: True (random min 4.5293); leaking full-grid restr test acc=1.0000"
+3,secondary-nonMLP-share-in-S,True,||P_S(L - L_mlp)|| / ||P_S L|| = 0.0431
+3,P3,True,key restr acc>=50% at 3325; key-minus-max-random>=0.30 at 2068; t50=6138
+3,P4,True,phi_key>=0.5 at 5037; t50=6138
+3,P4-report,True,excluded train acc <50% first at 4842; t50=6138; t95=6913
+3,P5:m1_restricted_cecal:onset,True,onset=683 phase=before (want before); t10=1568 t99=7191
+3,P5:m1_restricted_cecal:steepest,True,steepest=4640 phase=during (want during); t10=1568 t99=7191
+3,P5:m1_restricted_cecal:completion,False,completion=4747 phase=during (want after); t10=1568 t99=7191
+3,P5:m2_excluded_cecal:onset,False,onset=4216 phase=during (want before); t10=1568 t99=7191
+3,P5:m2_excluded_cecal:steepest,True,steepest=5668 phase=during (want during); t10=1568 t99=7191
+3,P5:m2_excluded_cecal:completion,False,completion=6386 phase=during (want after); t10=1568 t99=7191
+3,P5:m3_emb_key_energy:onset,False,onset=2329 phase=during (want before); t10=1568 t99=7191
+3,P5:m3_emb_key_energy:steepest,False,steepest=7277 phase=after (want during); t10=1568 t99=7191
+3,P5:m3_emb_key_energy:completion,True,completion=8592 phase=after (want after); t10=1568 t99=7191
+3,P6,True,"r0: restr<=5% 1.000, excl within 1pp 1.000; r1: restr<=5% 1.000, excl within 1pp 1.000; r2: restr<=5% 1.000, excl within 1pp 1.000; r3: restr<=5% 1.000, excl within 1pp 1.000; r4: restr<=5% 1.000, excl within 1pp 1.000"
+4,C4,True,grid rows + permutation reproduce make_dataset train/test tensors exactly
+4,C1b,True,rel diff train=0.00e+00 test=0.00e+00
+4,C1c,True,max |grid - batch| train logits = 0.00e+00
+4,C1,True,excluded with S = empty equals L
+4,C3,True,max|F^T F - I| = 1.84e-14
+4,C2,True,"restricted err=4.19e-14, excluded err=1.10e-13"
+4,P0,True,all-48 test-fit restricted test acc = 1.0000
+4,P1,True,"key excl train acc=0.0078 (<=0.10), CE*=4.5593 (>= 4.117), raw CE=6.339; random excl acc>=99% in 100/100; key CE* > all random CE*: True (random max 0.0000)"
+4,P2,False,"key test-fit restr test acc=1.0000 (>=0.99), CE*=0.0000; random restr acc<=5% in 88/100 (max 0.0791); key CE* < all random: True (random min 4.5694); leaking full-grid restr test acc=1.0000"
+4,P1-secondary-logitkey,True,"logit-key excl train acc=0.0078 (<=0.10), CE*=4.5593 (>= 4.117), raw CE=6.339; random excl acc>=99% in 100/100; key CE* > all random CE*: True (random max 0.0000)"
+4,P2-secondary-logitkey,False,"logit-key test-fit restr test acc=1.0000 (>=0.99), CE*=0.0000; random restr acc<=5% in 88/100 (max 0.0791); key CE* < all random: True (random min 4.5694); leaking full-grid restr test acc=1.0000"
+4,secondary-nonMLP-share-in-S,True,||P_S(L - L_mlp)|| / ||P_S L|| = 0.0131
+4,P3,True,key restr acc>=50% at 14949; key-minus-max-random>=0.30 at 11790; t50=22646
+4,P4,True,phi_key>=0.5 at 20924; t50=22646
+4,P4-report,True,excluded train acc <50% first at 20112; t50=22646; t95=23098
+4,P5:m1_restricted_cecal:onset,True,onset=4747 phase=before (want before); t10=19718 t99=23560
+4,P5:m1_restricted_cecal:steepest,False,steepest=18588 phase=before (want during); t10=19718 t99=23560
+4,P5:m1_restricted_cecal:completion,False,completion=19718 phase=during (want after); t10=19718 t99=23560
+4,P5:m2_excluded_cecal:onset,True,onset=18218 phase=before (want before); t10=19718 t99=23560
+4,P5:m2_excluded_cecal:steepest,True,steepest=21596 phase=during (want during); t10=19718 t99=23560
+4,P5:m2_excluded_cecal:completion,False,completion=23098 phase=during (want after); t10=19718 t99=23560
+4,P5:m3_emb_key_energy:onset,True,onset=7335 phase=before (want before); t10=19718 t99=23560
+4,P5:m3_emb_key_energy:steepest,True,steepest=22704 phase=during (want during); t10=19718 t99=23560
+4,P5:m3_emb_key_energy:completion,True,completion=24030 phase=after (want after); t10=19718 t99=23560
+4,P6,True,"r0: restr<=5% 1.000, excl within 1pp 1.000; r1: restr<=5% 1.000, excl within 1pp 1.000; r2: restr<=5% 0.993, excl within 1pp 1.000; r3: restr<=5% 1.000, excl within 1pp 1.000; r4: restr<=5% 1.000, excl within 1pp 1.000"
